@@ -1,0 +1,187 @@
+---
+title: "Regresión Lineal Múltiple - Ejercicio 5"
+author: "Alejandro Rojas Irineo"
+date: "`r Sys.Date()`"
+output: pdf_document
+geometry: margin=2.5cm
+fontsize: 11pt
+---
+
+# Ejercicio 5
+
+Suponga que una empresa farmacéutica está ofreciendo al gobierno un nuevo medicamento para tratar a pacientes con la enfermedad Covid-19. El costo del medicamento es considerable y para tomar una buena decisión se han acercado a usted para analizar los datos que ha compartido la empresa farmacéutica. El archivo `Tar2-5.csv` contiene la información: `Ant` es el número total de anticuerpos, `Trat` es una variable con dos niveles dependiendo si se aplicó o no el nuevo medicamento. Se sabe que tener mayores anticuerpos evita que se desarrolle una versión grave de la enfermedad y la empresa afirma que eso se logra al aplicar el medicamento, pues los pacientes que recibieron el medicamento tienen más anticuerpos que los que sólo recibieron placebo.
+
+También se sabe que la generación de anticuerpos es diferente dependiendo de la edad de los individuos y se sospecha que eso también podría afectar la efectividad del medicamento, así que al diseñar el experimento se seleccionaron al azar 100 personas de 300 que presentaban síntomas leves al iniciar el cuadro de la enfermedad a los que se les administró el medicamento, al resto se les dió sólo seguimiento. En todos los pacientes se capturó la edad y se procuró tener pacientes en el rango entre 16 y 60 años en ambos grupos. No se sospecha de otro aspecto que pudiera modificar la evaluación del medicamento. (Para este ejercicio no se requiere verificar supuestos del modelo, suponga que se cumplen).
+
+i.  Realice un análisis descriptivo de los datos considerando tanto la información de la edad como de la administración o no del medicamento.
+
+ii. Ajuste un modelo adecuado para evaluar la efectividad del medicamento ajustando por la edad de los pacientes. Es decir, un modelo que incluya como explicativas las variables edad, la binaria asociada a la administración del medicamento y la interacción obtenida como el producto de estas dos.
+
+iii. De acuerdo con el modelo ajustado, indique las expresiones asociadas a la relación de la generación promedio de anticuerpos con la edad en a) el grupo control y b) en el grupo que recibe el medicamento.
+
+iv. ¿Se puede decir que la edad afecta de la misma forma la generación de anticuerpos en el grupo control que en el grupo que recibe el medicamento? Realice una prueba de hipótesis apropiada e interprete.
+
+v.  Comente sobre el ajuste del modelo incluyendo la interpretación de cada uno de los coeficientes.
+
+vi. Argumente en contra o a favor de la afirmación: “El medicamente funciona aumentando el número de anticuerpos para todos los pacientes entre 30 y 60 años”. Se puede apoyar de pruebas de hipótesis o intervalos de confianza simultáneos.
+
+## Cargamos librerias
+
+```{r cargar-librerias, message=FALSE, warning=FALSE}
+# Configuración global de los chunks
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center")
+
+library(GGally)
+library(multcomp)
+library(knitr)
+library(stargazer)
+```
+
+## Cargamos los datos datos
+
+```{r carga_datos_2}
+Datos = read.csv("Tar2-5.csv", header = TRUE)
+kable(summary(Datos), caption = "Resumen estadístico de las variables")
+
+
+```
+
+Primero veamos que nuestros datos contienen una variable continua (Edad) y una variable categórica con dos niveles: Med (la administración de un medicamento) y Control (pacientes a los que no se les aplico nada). También podemos ver que como se indico en el planteamiento del problema, tenemos 300 observaciones o pacientes.
+
+## 1. Análisis descriptivo
+
+```{r analisis, }
+# Convertimos la variable categorica a tipo factor
+Datos$Trat = factor(Datos$Trat)
+str(Datos)
+
+# Algunas graficas
+ggpairs(data=Datos, title="Datos", aes(colour = Trat))
+with(Datos, plot(Edad, Ant, col=c("red", "blue")[Datos[,c("Trat")]] ))
+legend("topleft",levels(Datos[,c("Trat")]), col=c("red", "blue"), pch = c(0,0,0),  pt.cex=1.5,cex = .9, y.intersp = 1.3 , bty="n")
+
+
+```
+
+```{r niveles}
+levels(Datos$Trat)
+```
+
+Visualizamos que tenemos ahora si los dos niveles con los que vamos a trabajar, esto después de convertir a tipo factor
+
+```{r analisis_2}
+# Resumen estadistico
+cat("Resumen Estadístico de Anticuerpos por Grupo \n")
+print(tapply(Datos$Ant, Datos$Trat, summary))
+```
+
+A partir de la matriz de gráficos exploratorios y el resumen estadístico, analizamos el comportamiento de la generación de anticuerpos (Ant) en función de la edad (Edad) y la administración del tratamiento (Trat). Los hallazgos principales son los siguientes:
+
+- Comportamiento de los Anticuerpos por Tratamiento:
+Al observar los gráficos de densidad y boxplot que cruzan el nivel de anticuerpos con el tratamiento, podemos notar que el grupo que recibió el medicamento presenta una mayor concentración de anticuerpos en comparación con el grupo control. La distribución general del grupo con medicamento está desplazada hacia valores más altos. Esto lo podemos corroborar de manera exacta con el resumen estadístico, el cual nos permite comparar las medidas de tendencia central (media y mediana) y de dispersión (cuartiles y valores mínimos/máximos) para cada grupo.
+
+- Relación entre Edad y Anticuerpos:
+El gráfico de dispersión muestra una tendencia negativa: a medida que aumenta la edad del paciente, la cantidad de anticuerpos generados tiende a disminuir. Esta observación se confirma con los coeficientes de correlación de Pearson:
+
+Existe una correlación global negativa y significativa de -0.681.
+
+En el grupo control, esta caída es mucho más pronunciada (correlación de -0.810).
+
+En el grupo con medicamento, aunque la tendencia sigue siendo negativa, la caída es menor     (correlación de -0.466). Además, en el gráfico de dispersión se observa que, para casi cualquier rango de edad, los puntos azules (medicamento) tienden a estar por encima de los rojos (control).
+
+Distribución de la Edad en los Grupos:
+Los boxplots y de densidad para la variable Edad muestran que ambos grupos (control y medicamento) tienen distribuciones de edad muy similares, con medianas muy similares y abarcando el mismo rango.
+
+## 2. Ajuste del modelo
+
+```{r modelo_ajus}
+fit = lm(Ant ~ Trat * Edad, data = Datos)
+summary(fit)
+```
+
+Para este caso, generamos el siguiente modelo, pues tenemos un problema tipo ANCOVA
+
+$E(Ant ;\  Trat, Edad) = \beta_0 + \beta_1 \text{Med} + \beta_2 \text{Edad} + \beta_3 (\text{Med} \cdot \text{Edad})$
+
+Por otro lado observemos que la pruebe F se rechaza, pues el p-value $< 0.05$, contrastando: $H_0: \beta_i = 0$ vs $H_a: al\ menos\ un\ \beta_i \neq 0$, por lo que es plaucible usar nuestro modelo para responder las preguntas planteadas. Adicionalmente el coeficiente de determinación $R^2 = 0.621$, lo cual nos dice que con nuestro modelo se esta explicando el $62.1%$ de la esperanza de $y$, i.e de la variable Ant (anticuerpos)
+
+## 3. 
+Expresión de la relación de la generación promedio de anticuerpos con la edad en el grupo control:
+
+$E(Ant;\  Trat = Control, Edad) =  \beta_0 + \beta_2 \text{Edad}$
+
+Expresión de la relación de la generación promedio de anticuerpos con la edad en el grupo que recibe el medicamento:
+
+$E(y;  Trat = Med, Edad) = \beta_0 + \beta_1 + \beta_2 \text{Edad} + \beta_3 (\text{Edad})$
+
+
+## 4. Resolución de la pregunta
+
+Como queremos ver si la edad afecta de la misma forma la generación de anticuerpos en el grupo control que en el grupo que recibe el medicamento, entonces se debe cumplir que la pendiente en ambas expresiones del punto anterior sea la misma, es decir: $$\beta_2 = \beta_2 + \beta_3 \implies \beta_3 = 0$$
+
+De esta manera nos interesa contrastar:
+$H_0: \beta_3 = 0\ vs\ H_a: \beta_3 \neq 0$
+
+```{r cont_hip}
+K = matrix(c(0, 0, 0, 1), ncol = 4, nrow=1, byrow=TRUE)
+m=c(0)
+summary(glht(fit, linfct=K, rhs=m), test=Ftest())
+```
+
+Como el p-value $< 0.05$, rechazamos $H_0$, de modo que se tiene evidencia estadística suficiente para concluir que la edad no afecta de la misma manera a la generación de anticuerpos en el grupo control que en el grupo que recibe el medicamento.
+
+## 5. Ajuste del modelo 
+
+Del summary podemos ver que la pruebe F se rechaza, pues el p-value $< 0.05$, contrastando: $H_0: \beta_i = 0$ vs $H_a: al\ menos\ un\ \beta_i \neq 0$, por lo que es plaucible usar nuestro modelo para responder las preguntas planteadas. Adicionalmente el coeficiente de determinación $R^2 = 0.621$, lo cual nos dice que con nuestro modelo se esta explicando el $62.1%$ de la esperanza de $y$, i.e de la variable Ant (anticuerpos), esto indica además que incluir la edad, el tipo de tratamiento y su interacción proporciona un buen ajuste general a los datos observados.
+
+Interpretación de coeficientes 
+**$\beta_0$:**
+Es el número promedio de anticuerpos en el grupo control para una persona de Edad 0.
+
+**$\beta_1$:**
+Es la diferencia que hay entre el número promedio de anticuerpos en el grupo que tomo el medicamento y el grupo control para personas de edad 0.
+
+**$\beta_2$:**
+Es el aumento que hay en el número promedio de anticuerpos en el grupo control, al aumentar en una unidad la edad.
+
+**$\beta_3$:**
+Es la diferencia entre el efecto que tiene la edad sobre la esperanza de $y$, es decir, la generación de anticuerpos entre el grupo control y el de Medicamento.
+
+
+## 6. Resolución de la segunda pregunta sobre edades 30-60
+
+Como queremos ver si el tratamiento funciona aumentando el número de anticuerpos para todos los pacientes entre 30 y 60 años, obtengamos intervalos de confianza simultáneos para ver si con esto podemos concluir algo o si tenemos que realizar algo más en caso de que se "encimen"
+
+```{r graf}
+# Graficamos el diagrama de disperción 
+with(Datos, plot(Edad, Ant, col=c("red", "blue")[Datos[,c("Trat")]] ))
+legend("topleft",levels(Datos[,c("Trat")]), col=c("red", "blue"), pch = c(0,0,0),  pt.cex=1.5,cex = .9, y.intersp = 1.3 , bty="n")
+
+# Configuramos una secuencia para edades de 30 a 60
+Edad <- seq(from = 30, to = 60, by = 1)
+
+# Para una banda para la recta del Control
+# E(Y;TRT=Control, Edad)= b0 + b2 Edad
+KA <- cbind(1,0, Edad, 0)
+
+# Para una banda para la recta del Tratamiento
+# E(Y;TRT=Trat, X2)=  b0 + b1 +b2 Edad+ b3 Edad 
+KB <- cbind(1, 1, Edad, Edad)
+
+# Se une la información de todos los grupos
+K = rbind(KA, KB)
+
+fitE <- glht(fit, linfct = K)
+fitci <- confint(fitE, level = 0.90)
+
+
+lines(Edad, fitci$confint[1:31, "Estimate"], col="red")
+lines(Edad, fitci$confint[1:31,"upr"], col="red")
+lines(Edad, fitci$confint[1:31,"lwr"], col="red")
+
+lines(Edad, fitci$confint[32:62, "Estimate"], col="blue")
+lines(Edad, fitci$confint[32:62,"upr"], col="blue")
+lines(Edad, fitci$confint[32:62,"lwr"], col="blue")
+```
+Al visualizar nuestros intervalos de confianza simultaneos, podemos decir que esto es suficiente para concluir que el tratamiento suministrado a personas de edades entre 30-60 genera un efecto positivo en la generación de anticuerpos en comparación con el grupo control (esto en cada grupo de edades en dicho intervalo), es decir, al suministrar el medicamento, a pesar de que si existe una decaida, esto ocurre de manera menos abrupta que en el grupo al que no se le suministro nada, pudiendo confirmar la afirmación dada, con un 90% de confianza.
+
