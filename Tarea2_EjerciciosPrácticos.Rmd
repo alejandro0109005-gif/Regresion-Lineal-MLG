@@ -1,0 +1,1221 @@
+---
+title: "Regresión Lineal Múltiple - Tarea 2"
+author: " Ricardo León Magno Gómez - Alejandro Rojas Irineo - Danna Carolina Rodríguez Loyola "
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+geometry: margin=2.5cm
+fontsize: 11pt
+---
+
+# Ejercicio 3
+
+La Compañía Kenton Food desea comprar 4 diferentes diseños de empaque de un nuevo cereal. Veinte tiendas, con aproximadamente igual volumen de ventas y perfil de clientes, fueron seleccionadas como unidades experimentales. A cada una de las tiendas se le asignó uno de los empaques de forma aleatoria, de manera que cada empaque fuera asignado a 5 tiendas distintas. Las ventas, en número de casos, fueron observadas durante un periodo de estudio de 2 semanas:
+
+|         |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
+|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|
+| ventas  | 11  | 10  | 16  | 14  | 15  | 23  | 20  | 18  | 17  | 27  | 33  | 23  | 26  | 28  | 12  | 10  | 15  | 18  | 11  |
+| empaque | 1   | 1   | 1   | 1   | 1   | 2   | 2   | 2   | 2   | 3   | 3   | 3   | 3   | 3   | 4   | 4   | 4   | 4   | 4   |
+
+Un incendio ocurrió en una de las tiendas durante el periodo de estudio y dado que esto cambia las condiciones de venta con respecto a las otras tiendas, se decidió eliminar la medición de esa tienda. El número de ventas de esa tienda se excluye de la tabla anterior.
+
+Asuma que se cumplen todos los supuestos de un problema de tipo ANOVA.
+
+I.  Presente un gráfico para describir los datos, por ejemplo, un boxplot por tipo de empaque.
+
+II. Ajuste un modelo de regresión lineal múltiple adecuado. Indique de acuerdo a los parámetros del modelo la expresión del número de ventas promedio por cada tipo de empaque y dé estimaciones puntuales.
+
+III. Escriba las hipótesis que se contrastan con la prueba F asociada a la tabla ANOVA, ejecute ésta e interprete. Use $\alpha = 0.05$.
+
+IV. ¿Se puede considerar que el diseño del empaque afecta las ventas promedio? Use $\alpha = 0.05$. Argumente indicando con claridad qué hipótesis se están contrastando en términos de los parámetros del modelo ajustado.
+
+V.  Realice la prueba de hipótesis simultánea asociada a la igualdad de las ventas promedio entre todos los posibles pares de diferentes empaques. Use $\alpha = 0.05$. Interprete los resultados.
+
+VI. Suponga que los ejecutivos de la empresa tienen la sospecha de que el diseño de empaque 2 es el que aumenta las ventas en comparación con el resto de empaques. Realice una prueba de hipótesis para argumentar en favor o en contra de esta hipótesis de acuerdo con los datos observados. Use $\alpha = 0.05$.
+
+## **Solución Inciso I)**
+
+#### **Presente un gráfico para describir los datos, por ejemplo, un boxplot por tipo de empaque.**
+
+Cargamos librerías
+
+```{r cargar-librerias1, message=FALSE, warning=FALSE}
+library(multcomp) 
+library(GGally)
+library(ggplot2) 
+```
+
+Cargamos los datos
+
+```{r importar-datos1, echo=TRUE, fig.width=5, fig.height=5, out.width="100%"}
+# Limpiamos ambiente
+rm(list = ls(all.names = TRUE))
+gc()
+
+# Creamos vectores con los datos del ejercicio
+ventas <- c(11, 10, 16, 14, 15, 23, 20, 18, 17, 27, 33, 23, 26, 28, 12, 10, 15, 18, 11)
+empaque <- c(1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4)
+
+# Creamos nuestro data frame
+Datos <- data.frame(ventas, empaque)
+
+# Definimos a nuestra variable categórica como factor
+Datos$empaque <- factor(Datos$empaque)
+
+# Verificamos datos
+# summary(Datos)
+# str(Datos)
+# levels(Datos$empaque)
+```
+
+Creamos un gráfico para la descripción visual de nuestros datos
+
+```{r graficar-datos1, echo=TRUE, message=FALSE, warning=FALSE}
+par(mfrow = c(1, 1), mar = c(4.5, 4.5, 2, 1.5))
+
+# Creamos un boxplot para visualizar nuestros datos
+boxplot(Datos$ventas ~ Datos$empaque, 
+        xlab = "Tipo de Empaque", 
+        ylab = "Ventas",
+        main = "Ventas del cereal según el empaque",
+        col = c("skyblue", "lightgreen", "tomato", "orchid"))
+
+# Otros tripos de gráficas
+ggpairs(data = Datos, title = "Datos", mapping = aes(colour = empaque)) +
+  scale_colour_manual(values = c("skyblue", "lightgreen", "tomato", "orchid")) +
+  scale_fill_manual(values = c("skyblue", "lightgreen", "tomato", "orchid"))
+```
+
+Analizando visualmente las gráficas anteriores, podemos decir que el empaque 3 es el que tiene mejores resultados comparado con los otros 3 empaques. Por otro lado, los empaques 1 y 4 no han sido tan factibles para la venta de los cereales.
+
+## **Solución Inciso II)**
+
+#### **Ajuste un modelo de regresión lineal múltiple adecuado. Indique de acuerdo a los parámetros del modelo la expresión del número de ventas promedio por cada tipo de empaque y dé estimaciones puntuales.**
+
+Considerando los datos que tenemos, definirmos a la variable *empaque* como $x$, una variable categórica de 4 niveles, donde cada nivel es denotado por las etiquetas: "$x_1$", "$x_2$", "$x_3$", "$x_4$".
+
+Es decir, cada $x_i$ es una variable binaria que cumple que:
+
+$$
+x_i = 1 \hspace{0.35cm} \text{si} \hspace{0.35cm} x=\text{empaque } i \hspace{0.75cm} \text{y} \hspace{0.75cm} x_i=0 \hspace{0.35cm} \text{c.o.c}. ,\hspace{0.35cm} i=1,2,3,4
+$$
+
+Tomando como nivel de referencia a $x_1$, el modelo se ve como:
+
+$$
+y_i = \beta_0 + \beta_1 x_{i2} + \beta_2 x_{i3} + \beta_3 x_{i4} + \epsilon_i , \hspace{0.75cm} i = 1,...,19
+$$
+
+donde
+
+$$
+E(y; x) = \beta_0 + \beta_1 x_{2} + \beta_2 x_{3} + \beta_3 x_{4}
+$$
+
+De acuerdo a lo anterior, vamos a mostrar la expresión del número de ventas promedio por cada tipo de empaque:
+
+$$
+E(y; x = \text{empaque 1}) = \beta_0 
+$$
+
+$$
+E(y; x = \text{empaque 2}) = \beta_0 + \beta_1  
+$$
+
+$$
+E(y; x = \text{empaque 3}) = \beta_0 + \beta_2 
+$$
+
+$$
+E(y; x = \text{empaque 4}) = \beta_0 + \beta_3 
+$$
+
+Para dar las ***estimaciones puntuales*** de lo anterior hemos de hacer el modelo en R:
+
+```{r construir-modelo1, echo=TRUE, fig.width=4, fig.height=4, out.width="100%"}
+# Creación del modelo
+fit <- lm(Datos$ventas ~ Datos$empaque)
+summary(fit)
+coef(fit)
+```
+
+Entonces, las estimaciones puntuales son:
+
+$$
+\hat{E}(y; x = \text{empaque 1}) = \hat{\beta}_0 = 13.2
+$$
+
+$$
+\hat{E}(y; x = \text{empaque 2}) = \hat{\beta}_0 + \hat{\beta}_1 = 13.2 + 6.3 = 19.5  
+$$
+
+$$
+\hat{E}(y; x = \text{empaque 3}) = \hat{\beta}_0 + \hat{\beta}_2 = 13.2 + 14.2 = 17.4 
+$$
+
+$$
+\hat{E}(y; x = \text{empaque 4}) = \hat{\beta}_0 + \hat{\beta}_3 = 13.2 + 2.836629e^{-15}
+$$
+
+Notamos que el valor esperado de ventas de cereal entre el empaque 1 y el empaque 4 se distancia por una cantidad muy pequeña. Esto refuerza la idea de que son muy parecidos.
+
+## **Solución Inciso III)**
+
+#### **Escriba las hipótesis que se contrastan con la prueba F asociada a la tabla ANOVA, ejecute ésta e interprete. Use** $\alpha = 0.05$**.**
+
+**Prueba F asociada a la tabla ANOVA**
+
+Recordemos que la prueba F asociada a la tabla ANOVA busca probar que el modelo realmente sirve para modelar la $E(y;x)$, para ello planteamos la siguiente prueba de hipótesis:
+
+$$
+H_0 : \begin{pmatrix} \beta_1 \\ \beta_2 \\ \beta_3 \end{pmatrix} = \begin{pmatrix} 0 \\ 0 \\ 0 \end{pmatrix} 
+\quad \text{vs} \quad 
+H_a : \beta_j \neq 0 \text{ para alguna } j, \ j = 1, 2, 3.
+$$
+
+Donde:
+
+$H_0$ : El tipo de empaque no afecta a la venta promedio del cereal.
+
+$H_a$ : El tipo de empaque afecta a la venta promedio del cereal.
+
+Continuemos viendo el resultado de la prueba de hipótesis:
+
+```{r prueba F, echo=TRUE}
+# Creamos la matriz K
+K <- matrix(c(0,1,0,0,
+              0,0,1,0,
+              0,0,0,1), ncol=4, nrow=3, byrow=TRUE)
+
+# El vector de constantes a comparar
+m <- c(0,0,0)
+
+# Aplicamos la prueba de hipótesis
+summary(glht(fit, linfct=K, rhs=m), test=Ftest()) # Rechazamos H0
+```
+
+Cómo rechazamos $H_0$ podemos concluir que el tipo de empaque sí tiene un efecto significativo en las ventas promedio. Es decir, al menos una $\beta$ asociada al tipo de empaque es distinta de cero, entonces nuestro modelo es útil para modelar la $E[y]$.
+
+## **Solución Inciso IV)**
+
+#### **¿Se puede considerar que el diseño del empaque afecta las ventas promedio? Use** $\alpha = 0.05$**. Argumente indicando con claridad qué hipótesis se están contrastando en términos de los parámetros del modelo ajustado.**
+
+Ahora vamos a responder la pregunta: *¿Se puede considerar que el diseño del empaque afecta las ventas promedio?*
+
+Pensemos en el **complemento**: *¿Qué tiene que pasar para que el diseño del empaque no afecte a las ventas promedio?.* Para que esto suceda debe pasar que, sin importar el empaque, las ventas promedio se mantengan igual. Es decir:
+
+$$
+E(y; x = \text{empaque 1}) = E(y; x = \text{empaque 2}) = E(y; x = \text{empaque 3}) = E(y; x = \text{empaque 1})
+$$
+
+$$
+\beta_0 =\beta_0 + \beta_1 = \beta_0 + \beta_2 = \beta_0 + \beta_3 
+$$
+
+Entonces, para que el tipo de empaque no tenga efecto alguno en las ventas promedio del cereal tiene que pasar que:$$
+\beta_1 = \beta_2 = \beta_3 = 0
+$$
+
+Por lo tanto, para verificar lo anterior debemos considerar la siguiente prueba de hipótesis:
+
+$$
+H_0 : \begin{pmatrix} \beta_1 \\ \beta_2 \\ \beta_3 \end{pmatrix} = \begin{pmatrix} 0 \\ 0 \\ 0 \end{pmatrix} 
+\quad \text{vs} \quad 
+H_a : \beta_j \neq 0 \text{ para alguna } j, \ j = 1, 2, 3.
+$$
+
+Notemos que es exactamente la misma prueba que verificamos en el inciso anterior: la prueba F asociada a la tabla ANOVA. En otras palabras, verificar si el tipo de empaque tiene algún efecto en las ventas promedio del cereal es lo mismo que verificar que nuestro modelo realmente sirve para modelar las ventas promedio del cereal, esto porque construimos el modelo únicamente con la variable categórica referente al tipo de empaque.
+
+Habiendo realizado la prueba de hipótesis en el inciso anterior (con la misma $\alpha = 0.05$), decimos que el tipo de empaque sí tiene un efecto en las ventas promedio del cereal.
+
+## **Solución Inciso V)**
+
+#### **Realice la prueba de hipótesis simultánea asociada a la igualdad de las ventas promedio entre todos los posibles pares de diferentes empaques. Use** $\alpha = 0.05$**. Interprete los resultados.**
+
+Empezamos definiendo todas las pruebas individuales asociadas a la igualad de las ventas promedio con todos los posibles empaques:
+
+$$
+H_{0_1}: E[y;x=\text{empaque 1}]=E[y;x=\text{empaque 2}]
+$$
+
+$$
+H_{0_2}: E[y;x=\text{empaque 1}]=E[y;x=\text{empaque 3}]
+$$
+
+$$
+H_{0_3}: E[y;x=\text{empaque 1}]=E[y;x=\text{empaque 4}]
+$$
+
+$$
+H_{0_4}: E[y;x=\text{empaque 2}]=E[y;x=\text{empaque 3}]
+$$
+
+$$
+H_{0_5}: E[y;x=\text{empaque 2}]=E[y;x=\text{empaque 4}]
+$$
+
+$$
+H_{0_6}: E[y;x=\text{empaque 3}]=E[y;x=\text{empaque 4}]
+$$
+
+Equivalentemente
+
+$H_{0_1} : \beta_0 = \beta_0 + \beta_1$
+
+$H_{0_2} : \beta_0 = \beta_0 + \beta_2$
+
+$H_{0_3} : \beta_0 = \beta_0 + \beta_3$
+
+$H_{0_4} : \beta_0 + \beta_1= \beta_0 + \beta_2$
+
+$H_{0_5} : \beta_0 + \beta_1 = \beta_0 + \beta_3$
+
+$H_{0_6} : \beta_0 + \beta_2 = \beta_0 + \beta_3$
+
+Finalmente, las pruebas de hipótesis individuales son:
+
+$H_{0_1}: \beta_1=0$
+
+$H_{0_2}: \beta_2=0$
+
+$H_{0_3}: \beta_3=0$
+
+$H_{0_4}: \beta_1-\beta_2=0$
+
+$H_{0_5}: \beta_1-\beta_3=0$
+
+$H_{0_6}: \beta_2-\beta_3=0$
+
+Entonces, la hipótesis nula global de la prueba simultánea es
+
+$$
+H_0:\bigcap_{j=1}^{6}H_{0_j}
+$$
+
+donde $H_0$ global es la *igualdad de la esperanza en todos los tipos de empaque.* Procedamos a la prueba:
+
+```{r prueba-simultanea, echo=TRUE, fig.width=5, fig.height=5, out.width="100%"}
+# PRUEBA DE HIPÓTESIS SIMULTÁNEA
+# Definimos la matriz K
+K <- matrix(c(0,1,0,0,
+              0,0,1,0,
+              0,0,0,1,
+              0,1,-1,0,
+              0,1,0,-1,
+              0,0,1,-1), ncol=4, nrow=6, byrow=TRUE)
+
+# La matriz de constantes a comparar
+m <- c(0,0,0,0,0,0)
+
+# Prueba simultánea
+summary(glht(fit, linfct=K, rhs=m))
+
+# INTERVALOS DE CONFIANZA SIMULTÁNEOS
+# Ajustar el modelo y aplicar la función nativa de Tukey
+tukey_base <- TukeyHSD(aov(fit))
+
+# Grafica los intervalos de confianza simultáneos
+plot(tukey_base)
+```
+
+**Interpretación**
+
+Sabemos que con solo rechazar una prueba individual estamos rechazando la prueba global. En este caso, rechazamos $H_0$, es decir, que hay evidencia suficiente para negar la igualdad de las ventas promedio de cereal en todos los tipos de empaque.
+
+Analizando los resultados de la prueba vemos que únicamente rechazamos a $H_{0_3}$. Esto quiere decir que es plausible asumir que el promedio de ventas de cereal usando el empaque 1 es similar al promedio de ventas usando el empaque 4.
+
+$$
+H_{0_3}:E[y;x=\text{empaque 1}]=E[y;x=\text{empaque 4}]
+$$
+
+$$
+H_{0_3}:\beta_3=0
+$$
+
+Finalmente, podemos concluir que la variable binaria $x_4$, asociada a la variable categórica $x$, no nos aporta información adicional a nuestro modelo. En este caso, podríamos considerar la acción de removerla del modelo.
+
+## **Solución Inciso VI)**
+
+#### **Suponga que los ejecutivos de la empresa tienen la sospecha de que el diseño de empaque 2 es el que aumenta las ventas en comparación con el resto de empaques. Realice una prueba de hipótesis para argumentar en favor o en contra de esta hipótesis de acuerdo con los datos observados. Use** $\alpha = 0.05$**.**
+
+En otras palabras, los ejecutivos sospechan que **el empaque 2 es el mejor.** Para probar que el empaque 2 es el mejor tenemos que probar que sus las ventas promedio de cereal son mayores a las de los demás, de manera simultánea. La prueba que usaremos es la siguiente:
+
+$$
+H_0: \begin{matrix} H_{0_1}: \, \mu_2 \leq \mu_1 \\ H_{0_2}: \, \mu_2 \leq \mu_3 \\ H_{0_3}: \, \mu_2 \leq \mu_4 \end{matrix} \hspace{1cm} \text{vs}  \hspace{1cm}H_a: \begin{matrix} H_{a_1}: \, \mu_2 > \mu_1 \\ H_{a_2}: \, \mu_2 > \mu_3 \\ H_{a_3}: \, \mu_2 > \mu_4 \end{matrix}
+$$
+
+Donde $\mu_i$ representa el número de ventas promedio obtenido bajo el diseño de empaque $i$, para $i \in \{1, 2, 3, 4\}$.
+
+$$
+H_0: \begin{matrix} H_{0_1}: \, \mu_2 - \mu_1\leq 0 \\ H_{0_2}: \, \mu_2 - \mu_3\leq 0 \\ H_{0_3}: \, \mu_2 - \mu_4 \leq 0 \end{matrix} \hspace{1cm} \text{vs}  \hspace{1cm}H_a: \begin{matrix} H_{a_1}: \, \mu_2 - \mu_1 > 0 \\ H_{a_2}: \, \mu_2 - \mu_3 > 0 \\ H_{a_3}: \, \mu_2 - \mu_4 > 0 \end{matrix}
+$$
+
+Equivalentemente
+
+$$
+H_0: \begin{matrix} H_{0_1}: \, (\beta_0 + \beta_1) - (\beta_0) \leq 0 \\ H_{0_2}: \, (\beta_0 + \beta_1) - (\beta_0 + \beta_2) \leq 0 \\ H_{0_3}: \, (\beta_0 + \beta_1) - (\beta_0 + \beta_3) \leq 0 \end{matrix} \hspace{1cm} \text{vs}  \hspace{1cm}H_a: \begin{matrix} H_{a_1}: \, (\beta_0 + \beta_1) - (\beta_0) > 0 \\ H_{a_2}: \, (\beta_0 + \beta_1) - (\beta_0 + \beta_2) > 0 \\ H_{a_3}: \, (\beta_0 + \beta_1) - (\beta_0 + \beta_3) > 0 \end{matrix}
+$$
+
+Equivalentemente
+
+$$
+H_0: \begin{matrix} H_{0_1}: \, \beta_1 \leq 0 \\ H_{0_2}: \, \beta_1 - \beta_2 \leq 0 \\ H_{0_3}: \, \beta_1 - \beta_3 \leq 0 \end{matrix} \hspace{1cm} \text{vs}  \hspace{1cm}H_a: \begin{matrix} H_{a_1}: \, \beta_1 > 0 \\ H_{a_2}: \, \beta_1 - \beta_2 > 0 \\ H_{a_3}: \, \beta_1 - \beta_3 > 0 \end{matrix}
+$$
+
+Procedemos a realizar la prueba de hipótesis.
+
+```{r prueba.empaque2mejor, echo=TRUE, fig.width=5, fig.height=5, out.width="100%"}
+# PRUEBA DE HIPÓTESIS SIMULTÁNEA
+# Definimos la matriz K
+K <- matrix(c(0,1,0,0,
+              0,1,-1,0,
+              0,1,0,-1), ncol=4, nrow=3, byrow=TRUE)
+
+# La matriz de constantes a comparar
+m <- c(0,0,0)
+
+# Prueba simultánea
+# Hip alternativa:
+# 1: m2 > m1
+# 2: m2 > m3
+# 3: m2 > m4
+summary(glht(fit, linfct=K, rhs=m, alternative = "greater")) 
+```
+
+Los resultados son claros. Como vimos con anterioridad en el análisis visual, el promedio de ventas con el diseño del empaque 2 es mejor que el empaque 1 y el empaque 4, pues rechazamos a $H_{0_1}$ y a $H_{0_3}$, lo que quiere decir que no hay evidencia de que ocurra lo contrario.
+
+Por otro lado, en el caso de $H_{0_2}$ no rechazamos la hipótesis nula, por lo que es plausible decir que el promedio de ventas con el empaque 2 no es mejor que con el empaque 3. Podemos apoyar la conclusión anterior con el resultado de nuestro análisis visual anterior.
+
+------------------------------------------------------------------------
+
+# Ejercicio 4
+
+Una institución de investigación realiza un estudio para analizar los efectos de un nuevo tratamiento para controlar los niveles altos de ansiedad. Para eso consideran un puntaje (a mayor valor mayores niveles de ansiedad) y definen un conjunto experimental con 120 individuos que en ese puntaje presentan valores similares al inicio del estudio, 60 son hombres y 60 mujeres. En el mercado se sabe que hay otro tratamiento que se usa comúnmente para este fin, de manera que de forma aleatoria han divido a los 120 individuos en tres grupos: 40 a los que no se aplicó ningún tratamiento (control), 40 a los que se aplicó el tratamiento actual (Trat1) y 40 a los que se aplicó el nuevo tratamiento (Trat2); 20 hombres y 20 mujeres en cada grupo.
+
+```{r Cargar Datos2, message=FALSE, warning=FALSE}
+## Limpieza del "Environment" y liberación de espacio en memoria
+rm(list = ls(all.names = TRUE))
+
+##Datos
+library(readr)
+Datos <- read_csv("Tar2-4B.csv")
+View(Datos)
+```
+
+------------------------------------------------------------------------
+
+## I. Análisis Descriptivo
+
+------------------------------------------------------------------------
+
+```{r Análisis Descriptivo2, message=FALSE, warning=FALSE}
+library(ggplot2)
+#BoxPlot
+ggplot(Datos, aes(x = Trat, y = Puntaje, fill = Sexo)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("Hombre" = "lightblue", "Mujer" = "red")) +
+  labs(title = "Distribución de Puntajes por Tratamiento y Sexo",
+       x = "Tipo de Tratamiento",
+       y = "Puntaje") +
+  theme_minimal() +
+  theme(
+    legend.title = element_text(size = 16, face = "bold"), 
+    legend.text = element_text(size = 12),                
+    legend.key.size = unit(1.2, "cm"),                    
+    axis.title = element_text(size = 14),                 
+    axis.text = element_text(size = 12)                   
+  )
+#Gráfico Interración
+with(Datos, interaction.plot(x.factor = Trat,    # Eje X
+                             trace.factor = Sexo, # Las líneas
+                             response = Puntaje,  # Eje Y
+                             fun = mean,          # Graficar la media
+                             type = "b",          # Puntos y líneas
+                             col = c("blue", "red"), 
+                             pch = c(19, 17),
+                             fixed = TRUE,
+                             main = "Gráfico de Interacción: Tratamiento vs Sexo",
+                             xlab = "Tipo de Tratamiento",
+                             ylab = "Puntaje Promedio"))
+```
+
+Interpretación
+
+1.  **CONTROL:** En el boxplot la caja de las mujeres es notablemente más pequeña que la de los hombres, lo que indica una mayor homogeneidad (menor variabilidad) en sus niveles de ansiedad base. En el gráfico de interacción pareciera no haber una diferencia entre hombres y mujeres, sus puntos están casi a la misma altura.
+
+2.  **TRATAMIENTO 1:**
+
+-   **Hombres:** Se observa una reducción marcada en el puntaje, recordemos que a menor puntaje menores niveles de ansiedad, esto nos sugiere efectividad en el tratamiento 1.
+-   **Mujeres:** Con el tratamiento 1, en promedio disminuyo su puntaje. A diferencia de los hombres, el puntaje de las mujeres no bajo tanto.
+
+3.  **TRATAMIENTO 2:**
+
+-   **Hombres:** El puntaje sube respecto al Trat1, aunque se mantiene por debajo del control.
+-   **Mujeres:** Es el tratamiento con menor puntaje mediano. Parece ser el más efectivo para ellas.
+
+> Es importante notar que pareciera que el sexo sí tiene un efecto.
+
+------------------------------------------------------------------------
+
+## II. Modelo de Regresión
+
+------------------------------------------------------------------------
+
+Recordemos que tenemos dos categorías:
+
+-   **Categoría 1 (Tratamiento):** Control, Tratamiento 1, Tratamiento 2
+-   **Categoría 2 (Sexo):** Hombre, Mujer
+
+En nuestro modelo no incluiremos la categoría Control ni la categoría Hombre, por lo que ese será nuestro nivel de referencia.
+
+<u>Modelo:</u>
+
+$y = B_0 +B_1X_{Trat1}+ B_2X_{Trat2} + B_3X_{Mujer}+ B_4X_{Trat1}X_{Mujer} + B_5X_{Trat2}X_{Mujer} + e$
+
+```{r Modelo2}
+fit1 <- lm(Puntaje ~ Trat * Sexo, data = Datos)
+summary(fit1)
+```
+
+Calculemos las esperanzas:
+
+$E[Y, Tratamiento = Control, Sexo = Hombre] = B_0$
+
+$E[Y, Tratamiento = Control,Sexo= Mujer] = B_0 + B_3$
+
+$E[Y, Tratamiento = Tratamiento1, Sexo = Hombre] = B_0 + B_1$
+
+$E[Y, Tratamiento = Tratamiento1, Sexo = Mujer] = B_0 + B_1 + B_3 + B_4$
+
+$E[Y, Tratamiento = Tratamiento2, Sexo = Hombre] = B_0 + B_2$
+
+$E[Y, Tratamiento = Tratamiento2, Sexo = Mujer] = B_0 + B_2 + B_3 + B_5$
+
+Para la estimación de las Betas nos podemos fijar en el resumen del modelo en la sección de "Estimate" o lo podemos calcular a mano aplicando lo visto en clase.
+
+$\widehat{\beta} = (X^t X)^{-1} X^t y$
+
+R ya implementa un código para calcular la matriz diseño y hacer las respectivas operaciones.
+
+```{r Estimación2}
+#ESTIMACIÓN
+# R arma la matriz de diseño X automáticamente basado en la fórmula
+X_diseño <- model.matrix(~ Trat * Sexo, data = Datos)
+y <- Datos$Puntaje
+# Aplicamos la misma fórmula matricial
+betas_manual <- solve(t(X_diseño) %*% X_diseño) %*% t(X_diseño) %*% y
+print(betas_manual)
+```
+
+Es decir:
+
+$\widehat{\beta} = (\widehat{\beta_0},\widehat{\beta_1},\widehat{\beta_2},\widehat{\beta_3},\widehat{\beta}_4,\widehat{\beta_5})$
+
+$\widehat{\beta} = (11.46,-4.14,-2.36,-0.31,2.30,-1.58)$
+
+Lo cuál es la misma estimación si nos fijamos en el resumen del modelo.
+
+------------------------------------------------------------------------
+
+## III. Hipótesis — Tabla ANOVA
+
+------------------------------------------------------------------------
+
+Esta prueba contrasta si las variables son significativas o no. Con una prueba de hipótesis comparando si todas las betas son cero contra si hay al menos una beta distinta de cero. Tomaremos una significancia del .05.
+
+$\begin{aligned}H_0 &: \beta_1 = \beta_2 = \beta_3 = \beta_4 = \beta_5 = 0 \\&\text{vs} \\H_a &: \exists \, \beta_j \neq 0 \quad \text{para } j \in \{1, 2, 3, 4, 5\}\end{aligned}$
+
+La hipótesis nula significa que ninguna variable independiente tiene un efecto lineal sobre Y, en otras palabras, el modelo no explica nada.
+
+La hipótesis alternativa significa que al menos una variable independiente sí tiene efecto lineal sobre Y.
+
+Para resolver esta prueba nos podemos fijar en el p-value del resumen del modelo, el cuál nos había dado $2.635 \times 10^{-10}$.
+
+Otra forma de hacer la prueba:
+
+```{r Prueba ANOVA2}
+drop1(fit1, test="F")
+```
+
+En ambos casos tenemos un p-value menor al nivel de significancia, por lo que rechazamos $H_0$. Esto nos dice que al menos un beta es distinto de cero, es decir, que al menos tenemos una variable significativa sobre Y.
+
+------------------------------------------------------------------------
+
+## IV. ¿El Sexo Tiene Efecto?
+
+------------------------------------------------------------------------
+
+Para determinar si el sexo influye en la variable de respuesta, se comparan los valores esperados (esperanzas) entre hombres y mujeres para cada nivel del factor tratamiento (Control, Tratamiento 1 y Tratamiento 2). Bajo la hipótesis nula de que el sexo no tiene efecto, las esperanzas de los tratamientos deberían ser idénticas, independientemente del género del individuo. En términos de los parámetros del modelo:
+
+$E[Y,Control,Hombre] = E[Y, Control,Mujer] \implies H_{01}: B_3 = 0$
+
+$E[Y, Trat1,Hombre] = E[Y,Trat1, Mujer] \implies H_{02}: B_3 + B_4 = 0$
+
+$E[Y,Trat2,Hombre] = E[Y,Trat2, Mujer] \implies H_{03}: B_3 + B_5 = 0$
+
+Construimos nuestra prueba de hipótesis general:
+
+$\begin{aligned}H_0 &: \bigcap_{i=1}^{3} H_{0i} \\\text{vs} & \\H_a &: \exists \, i \in \{ \text{Control, Trat 1, Trat 2} \} \text{ tal que } E[Y | \text{Trat}_i, \text{Hombre}] \neq E[Y | \text{Trat}_i, \text{Mujer}]\end{aligned}$
+
+La hipótesis nula establece que el factor "Sexo" no tiene un efecto significativo en ninguna de las condiciones evaluadas. En otras palabras, se asume que las diferencias entre hombres y mujeres son nulas en todos los niveles del tratamiento de forma simultánea. Mientras que la hipótesis alternativa nos diría que al menos existe un nivel donde el sexo es relevante.
+
+```{r, message=FALSE, warning=FALSE}
+# FASE 1: Prueba F Global sobre la matriz de contrastes
+library(multcomp)
+
+# Tu matriz K ya corregida (con ncol=6)
+K <- matrix(c(0, 0, 0, 1, 0, 0,
+              0, 0, 0, 1, 1, 0,
+              0, 0, 0, 1, 0, 1), 
+            ncol = 6, nrow = 3, byrow = TRUE)
+m <- c(0, 0, 0)
+
+# Corremos la prueba F global
+prueba_global <- summary(glht(fit1, linfct = K, rhs = m), test = Ftest())
+print(prueba_global)
+```
+
+Notamos que el p-value es menor a nuestro nivel de significancia (0.025) por lo que procedemos a Rechazar $H_0$. Es decir rechazamos que el factor Sexo no tiene un efecto. Es plausible decir que el Sexo tiene un efecto en el tratamiento.
+
+Procedemos a hacer una prueba simultánea con pruebas t individuales, para identificar específicamente dónde está la diferencia.
+
+```{r Prueba2}
+# FASE 2: Prueba Simultánea
+prueba_simultanea <- summary(glht(fit1, linfct = K, rhs = m))
+print(prueba_simultanea)
+```
+
+Vamos a ver qué fue lo que nos hizo rechazar $H_0$.
+
+Esta es una prueba individual en la que podemos identificar qué tratamiento es el que no tiene diferencia si se aplica en hombres o en mujeres.
+
+Notemos que para la primera comparación (Control entre Hombres y Mujeres), su p-value nos indica que **NO** debemos rechazar $H_0$, es decir, el efecto entre hombres y mujeres no tiene importancia.
+
+Sin embargo, en las últimas dos pruebas tenemos un p-value menor al nivel de significancia (0.025) por lo que Rechazamos $H_0$; así decimos que aplicar el Tratamiento 1 y el Tratamiento 2 sí tiene diferencia entre hombres y mujeres.
+
+> **Conclusión:** Es plausible que la variable sexo solo tiene un efecto en el Tratamiento 1 y en el Tratamiento 2, mientras que en el Control es indiferente.
+
+Veamos si es necesario reducir el modelo haciendo una prueba de hipótesis comparando el modelo que ya tenemos con un modelo reducido (sin interacciones):
+
+```{r Reducción?}
+#Comparamos los dos modelos
+# Modelo Completo (el que ya tenemos con interacción)
+fit1 <- lm(Puntaje ~ Trat * Sexo, data = Datos)
+# Modelo Reducido (sin interacción)
+fitreducido <- lm(Puntaje ~ Trat + Sexo, data = Datos)
+# Comparación estadística para ver si la reducción es válida
+#H0: El modelo reducido es suficiente
+#Ha: El modelo completo es necesario
+anova(fitreducido, fit1)
+```
+
+Al tener un p-value muy bajo rechazamos $H_0$, por lo que nos quedaremos con el modelo completo sin reducciones.
+
+------------------------------------------------------------------------
+
+## VI. ¿El Tratamiento 2 Tiene el Mejor Desempeño?
+
+------------------------------------------------------------------------
+
+Para que el tratamiento 2 tenga el mejor desempeño debe tenerlo tanto para mujeres como para hombres. Compararemos el tratamiento 2 con el tratamiento 1 y el control entre hombres y mujeres.
+
+Se debe cumplir que:
+
+$\begin{aligned}    E[Y \mid \text{Trat } 2, \text{Hombre}] &< E[Y \mid \text{Control}, \text{Hombre}] \\    E[Y \mid \text{Trat } 2, \text{Hombre}] &< E[Y \mid \text{Trat } 1, \text{Hombre}] \\    E[Y \mid \text{Trat } 2, \text{Mujer}] &< E[Y \mid \text{Control}, \text{Mujer}] \\    E[Y \mid \text{Trat } 2, \text{Mujer}] &< E[Y \mid \text{Trat } 1, \text{Mujer}] \end{aligned}$
+
+En términos de Betas:
+
+$\begin{aligned}\beta_0 + \beta_2 &< \beta_0 \\\beta_0 + \beta_2 &< \beta_0 + \beta_1 \\\beta_0 + \beta_2 + \beta_3 + \beta_5 &< \beta_0 + \beta_3 \\\beta_0 + \beta_2 + \beta_3 + \beta_5 &< \beta_0 + \beta_1 + \beta_3 + \beta_4\end{aligned}$
+
+Simplificando:
+
+$\begin{aligned}\beta_2 &< 0 \\\beta_2 - \beta_1 &< 0 \\\beta_2 + \beta_5 &< 0 \\\beta_2 - \beta_1 - \beta_4 + \beta_5 &< 0\end{aligned}$
+
+$\begin{aligned}H_0 : \beta_2 &\geq 0 \quad \text{y} \quad \beta_2 - \beta_1 \geq 0 \quad \text{y} \\\beta_2 + \beta_5 &\geq 0 \quad \text{y} \quad \beta_2 - \beta_1 - \beta_4 + \beta_5 \geq 0\end{aligned}$
+
+$H_a = \text{el complemento}$
+
+```{r Tratamiento2 el mejor?}
+KNuevo <- matrix(c(0, 0, 1, 0, 0, 0,
+              0, -1, 1, 0, 0, 0,
+              0, 0, 1, 0, 0, 1,
+              0,-1,1,0,-1,1), 
+            ncol = 6, nrow = 4, byrow = TRUE)
+m <- c(0, 0, 0,0)
+
+summary(glht(fit1, linfct=KNuevo, rhs=m, alternative="less"))
+
+```
+
+Con un nivel de significancia del 0.05 podemos decir que no se rechaza $H_0$.
+
+En todas las pruebas individuales se rechaza $H_0$ por excepción de la segunda prueba dónde NO se rechaza $H_0$, por lo que la prueba en general no rechaza $H_0$.
+
+La prueba que falla es en decir que el tratamiento 2 es mejor que el tratamiento 1, lo cuál no se cumple.
+
+Al fallar en una prueba, en general podemos decir que el tratamiento 2 no es el que tiene mejor desempeño.
+
+------------------------------------------------------------------------
+
+## VII. Trat 2 para Mujeres, Trat 1 para Hombres
+
+------------------------------------------------------------------------
+
+Se realizará una prueba de hipótesis para argumentar en favor o en contra de la hipótesis: el nuevo tratamiento tiene el mejor desempeño en mujeres, aunque el tratamiento actual lo tiene en hombres.
+
+Realizaremos comparaciones del tratamiento 2 con mujeres y del tratamiento 1 con hombres.
+
+$\begin{aligned}    E[Y \mid \text{Trat } 2, \text{Mujer}] &< E[Y \mid \text{Control}, \text{Mujer}] \\    E[Y \mid \text{Trat } 2, \text{Mujer}] &< E[Y \mid \text{Trat } 1, \text{Mujer}] \\    E[Y \mid \text{Trat } 1, \text{Hombre}] &< E[Y \mid \text{Control}, \text{Hombre}] \\    E[Y \mid \text{Trat } 1, \text{Hombre}] &< E[Y \mid \text{Trat } 2, \text{Hombre}] \end{aligned}$
+
+En términos de betas:
+
+$\begin{aligned}\beta_0 + \beta_2 +\beta_3 + \beta_5 &< \beta_0 + \beta_3 \\\beta_0 + \beta_2 +\beta_3 + \beta_5 &< \beta_0 + \beta_1 + \beta_3 + \beta_4 \\\beta_0 + \beta_1&< \beta_0 \\\beta_0 + \beta_1&< \beta_0 + \beta_2\end{aligned}$
+
+Simplificando:
+
+$\begin{aligned}\beta_2 +\beta_5 &< 0 \\\beta_2 + \beta_5 -\beta_1 -\beta_4 &< 0 \\\beta_1 &< 0 \\\beta_1 - \beta_2 &< 0\end{aligned}$
+
+Así podemos definir nuestras hipótesis.
+
+$\begin{aligned}H_0 : \beta_2 + \beta_5 &\geq 0 \quad \text{y} \quad \beta_2 +\beta_5 - \beta_1 -\beta_4 \geq 0 \quad \text{y} \\\beta_1 &\geq 0 \quad \text{y} \quad \beta_1 - \beta_2 \geq 0\end{aligned}$
+
+$H_a = \text{el complemento}$
+
+```{r Prueba Final}
+Kfinal <- matrix(c(0, 0, 1, 0, 0, 1,
+                   0, -1, 1, 0, -1, 1,
+                   0, 1, 0, 0, 0, 0,
+                   0,1,-1,0,0,0), 
+                 ncol = 6, nrow = 4, byrow = TRUE)
+m <- c(0, 0, 0,0)
+
+summary(glht(fit1, linfct=Kfinal, rhs=m, alternative="less"))
+
+```
+
+En general podemos decir que rechazamos $H_0$ pues debido a nuestro nivel de significancia (0.05) todas las pruebas individuales se rechazan. Nos quedamos con decir que es plausible que el tratamiento 1 sea el mejor para hombres y el tratamiento 2 para mujeres.
+
+------------------------------------------------------------------------
+
+## Conclusión
+
+------------------------------------------------------------------------
+
+Estos resultados concuerdan perfectamente con nuestro BoxPlot y nuestra gráfica de interacción; a pesar de que los gráficos ya nos lo decían, era necesario confirmarlo con las pruebas de hipótesis correspondientes.
+
+> El sexo es un factor que afecta el puntaje del tratamiento. Para hombres el mejor tratamiento es el **Tratamiento 1**, pues es el que en promedio tiene menor puntaje. Para mujeres es el **Tratamiento 2**, ya que reduce significativamente su puntaje, con el tratamiento 2 se logran menores niveles de ansiedad.
+
+------------------------------------------------------------------------
+
+# Ejercicio 5
+
+Suponga que una empresa farmacéutica está ofreciendo al gobierno un nuevo medicamento para tratar a pacientes con la enfermedad Covid-19. El costo del medicamento es considerable y para tomar una buena decisión se han acercado a usted para analizar los datos que ha compartido la empresa farmacéutica. El archivo `Tar2-5.csv` contiene la información: `Ant` es el número total de anticuerpos, `Trat` es una variable con dos niveles dependiendo si se aplicó o no el nuevo medicamento. Se sabe que tener mayores anticuerpos evita que se desarrolle una versión grave de la enfermedad y la empresa afirma que eso se logra al aplicar el medicamento, pues los pacientes que recibieron el medicamento tienen más anticuerpos que los que sólo recibieron placebo.
+
+También se sabe que la generación de anticuerpos es diferente dependiendo de la edad de los individuos y se sospecha que eso también podría afectar la efectividad del medicamento, así que al diseñar el experimento se seleccionaron al azar 100 personas de 300 que presentaban síntomas leves al iniciar el cuadro de la enfermedad a los que se les administró el medicamento, al resto se les dió sólo seguimiento. En todos los pacientes se capturó la edad y se procuró tener pacientes en el rango entre 16 y 60 años en ambos grupos. No se sospecha de otro aspecto que pudiera modificar la evaluación del medicamento. (Para este ejercicio no se requiere verificar supuestos del modelo, suponga que se cumplen).
+
+i.  Realice un análisis descriptivo de los datos considerando tanto la información de la edad como de la administración o no del medicamento.
+
+ii. Ajuste un modelo adecuado para evaluar la efectividad del medicamento ajustando por la edad de los pacientes. Es decir, un modelo que incluya como explicativas las variables edad, la binaria asociada a la administración del medicamento y la interacción obtenida como el producto de estas dos.
+
+iii. De acuerdo con el modelo ajustado, indique las expresiones asociadas a la relación de la generación promedio de anticuerpos con la edad en a) el grupo control y b) en el grupo que recibe el medicamento.
+
+iv. ¿Se puede decir que la edad afecta de la misma forma la generación de anticuerpos en el grupo control que en el grupo que recibe el medicamento? Realice una prueba de hipótesis apropiada e interprete.
+
+v.  Comente sobre el ajuste del modelo incluyendo la interpretación de cada uno de los coeficientes.
+
+vi. Argumente en contra o a favor de la afirmación: “El medicamente funciona aumentando el número de anticuerpos para todos los pacientes entre 30 y 60 años”. Se puede apoyar de pruebas de hipótesis o intervalos de confianza simultáneos.
+
+## Cargamos librerias
+
+```{r cargar-librerias3, message=FALSE, warning=FALSE}
+# Configuración global de los chunks
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center")
+
+library(GGally)
+library(multcomp)
+library(knitr)
+library(stargazer)
+```
+
+## Cargamos los datos datos
+
+```{r carga_datos_2}
+Datos = read.csv("Tar2-5.csv", header = TRUE)
+kable(summary(Datos), caption = "Resumen estadístico de las variables")
+
+
+```
+
+Primero veamos que nuestros datos contienen una variable continua (Edad) y una variable categórica con dos niveles: Med (la administración de un medicamento) y Control (pacientes a los que no se les aplico nada). También podemos ver que como se indico en el planteamiento del problema, tenemos 300 observaciones o pacientes.
+
+## 1. Análisis descriptivo
+
+```{r analisis, }
+# Convertimos la variable categorica a tipo factor
+Datos$Trat = factor(Datos$Trat)
+str(Datos)
+
+# Algunas graficas
+ggpairs(data=Datos, title="Datos", aes(colour = Trat))
+with(Datos, plot(Edad, Ant, col=c("red", "blue")[Datos[,c("Trat")]] ))
+legend("topleft",levels(Datos[,c("Trat")]), col=c("red", "blue"), pch = c(0,0,0),  pt.cex=1.5,cex = .9, y.intersp = 1.3 , bty="n")
+
+
+```
+
+```{r niveles}
+levels(Datos$Trat)
+```
+
+Visualizamos que tenemos ahora si los dos niveles con los que vamos a trabajar, esto después de convertir a tipo factor
+
+```{r analisis_2}
+# Resumen estadistico
+cat("Resumen Estadístico de Anticuerpos por Grupo \n")
+print(tapply(Datos$Ant, Datos$Trat, summary))
+```
+
+A partir de la matriz de gráficos exploratorios y el resumen estadístico, analizamos el comportamiento de la generación de anticuerpos (Ant) en función de la edad (Edad) y la administración del tratamiento (Trat). Los hallazgos principales son los siguientes:
+
+-   Comportamiento de los Anticuerpos por Tratamiento: Al observar los gráficos de densidad y boxplot que cruzan el nivel de anticuerpos con el tratamiento, podemos notar que el grupo que recibió el medicamento presenta una mayor concentración de anticuerpos en comparación con el grupo control. La distribución general del grupo con medicamento está desplazada hacia valores más altos. Esto lo podemos corroborar de manera exacta con el resumen estadístico, el cual nos permite comparar las medidas de tendencia central (media y mediana) y de dispersión (cuartiles y valores mínimos/máximos) para cada grupo.
+
+-   Relación entre Edad y Anticuerpos: El gráfico de dispersión muestra una tendencia negativa: a medida que aumenta la edad del paciente, la cantidad de anticuerpos generados tiende a disminuir. Esta observación se confirma con los coeficientes de correlación de Pearson:
+
+Existe una correlación global negativa y significativa de -0.681.
+
+En el grupo control, esta caída es mucho más pronunciada (correlación de -0.810).
+
+En el grupo con medicamento, aunque la tendencia sigue siendo negativa, la caída es menor (correlación de -0.466). Además, en el gráfico de dispersión se observa que, para casi cualquier rango de edad, los puntos azules (medicamento) tienden a estar por encima de los rojos (control).
+
+Distribución de la Edad en los Grupos: Los boxplots y de densidad para la variable Edad muestran que ambos grupos (control y medicamento) tienen distribuciones de edad muy similares, con medianas muy similares y abarcando el mismo rango.
+
+## 2. Ajuste del modelo
+
+```{r modelo_ajus}
+fit = lm(Ant ~ Trat * Edad, data = Datos)
+summary(fit)
+```
+
+Para este caso, generamos el siguiente modelo, pues tenemos un problema tipo ANCOVA
+
+$E(Ant ;\  Trat, Edad) = \beta_0 + \beta_1 \text{Med} + \beta_2 \text{Edad} + \beta_3 (\text{Med} \cdot \text{Edad})$
+
+Por otro lado observemos que la pruebe F se rechaza, pues el p-value $< 0.05$, contrastando: $H_0: \beta_i = 0$ vs $H_a: al\ menos\ un\ \beta_i \neq 0$, por lo que es plaucible usar nuestro modelo para responder las preguntas planteadas. Adicionalmente el coeficiente de determinación $R^2 = 0.621$, lo cual nos dice que con nuestro modelo se esta explicando el $62.1%$ de la esperanza de $y$, i.e de la variable Ant (anticuerpos)
+
+## 3.
+
+Expresión de la relación de la generación promedio de anticuerpos con la edad en el grupo control:
+
+$E(Ant;\  Trat = Control, Edad) =  \beta_0 + \beta_2 \text{Edad}$
+
+Expresión de la relación de la generación promedio de anticuerpos con la edad en el grupo que recibe el medicamento:
+
+$E(y;  Trat = Med, Edad) = \beta_0 + \beta_1 + \beta_2 \text{Edad} + \beta_3 (\text{Edad})$
+
+## 4. Resolución de la pregunta
+
+Como queremos ver si la edad afecta de la misma forma la generación de anticuerpos en el grupo control que en el grupo que recibe el medicamento, entonces se debe cumplir que la pendiente en ambas expresiones del punto anterior sea la misma, es decir: $$\beta_2 = \beta_2 + \beta_3 \implies \beta_3 = 0$$
+
+De esta manera nos interesa contrastar: $H_0: \beta_3 = 0\ vs\ H_a: \beta_3 \neq 0$
+
+```{r cont_hip}
+K = matrix(c(0, 0, 0, 1), ncol = 4, nrow=1, byrow=TRUE)
+m=c(0)
+summary(glht(fit, linfct=K, rhs=m), test=Ftest())
+```
+
+Como el p-value $< 0.05$, rechazamos $H_0$, de modo que se tiene evidencia estadística suficiente para concluir que la edad no afecta de la misma manera a la generación de anticuerpos en el grupo control que en el grupo que recibe el medicamento.
+
+## 5. Ajuste del modelo
+
+Del summary podemos ver que la pruebe F se rechaza, pues el p-value $< 0.05$, contrastando: $H_0: \beta_i = 0$ vs $H_a: al\ menos\ un\ \beta_i \neq 0$, por lo que es plaucible usar nuestro modelo para responder las preguntas planteadas. Adicionalmente el coeficiente de determinación $R^2 = 0.621$, lo cual nos dice que con nuestro modelo se esta explicando el $62.1%$ de la esperanza de $y$, i.e de la variable Ant (anticuerpos), esto indica además que incluir la edad, el tipo de tratamiento y su interacción proporciona un buen ajuste general a los datos observados.
+
+Interpretación de coeficientes $\beta_0$: Es el número promedio de anticuerpos en el grupo control para una persona de Edad 0.
+
+$\beta_1$: Es la diferencia que hay entre el número promedio de anticuerpos en el grupo que tomo el medicamento y el grupo control para personas de edad 0.
+
+$\beta_2$: Es el aumento que hay en el número promedio de anticuerpos en el grupo control, al aumentar en una unidad la edad.
+
+$\beta_3$: Es la diferencia entre el efecto que tiene la edad sobre la esperanza de $y$, es decir, la generación de anticuerpos entre el grupo control y el de Medicamento.
+
+## 6. Resolución de la segunda pregunta sobre edades 30-60
+
+Como queremos ver si el tratamiento funciona aumentando el número de anticuerpos para todos los pacientes entre 30 y 60 años, obtengamos intervalos de confianza simultáneos para ver si con esto podemos concluir algo o si tenemos que realizar algo más en caso de que se "encimen"
+
+```{r graf}
+# Graficamos el diagrama de disperción 
+with(Datos, plot(Edad, Ant, col=c("red", "blue")[Datos[,c("Trat")]] ))
+legend("topleft",levels(Datos[,c("Trat")]), col=c("red", "blue"), pch = c(0,0,0),  pt.cex=1.5,cex = .9, y.intersp = 1.3 , bty="n")
+
+# Configuramos una secuencia para edades de 30 a 60
+Edad <- seq(from = 30, to = 60, by = 1)
+
+# Para una banda para la recta del Control
+# E(Y;TRT=Control, Edad)= b0 + b2 Edad
+KA <- cbind(1,0, Edad, 0)
+
+# Para una banda para la recta del Tratamiento
+# E(Y;TRT=Trat, X2)=  b0 + b1 +b2 Edad+ b3 Edad 
+KB <- cbind(1, 1, Edad, Edad)
+
+# Se une la información de todos los grupos
+K = rbind(KA, KB)
+
+fitE <- glht(fit, linfct = K)
+fitci <- confint(fitE, level = 0.90)
+
+
+lines(Edad, fitci$confint[1:31, "Estimate"], col="red")
+lines(Edad, fitci$confint[1:31,"upr"], col="red")
+lines(Edad, fitci$confint[1:31,"lwr"], col="red")
+
+lines(Edad, fitci$confint[32:62, "Estimate"], col="blue")
+lines(Edad, fitci$confint[32:62,"upr"], col="blue")
+lines(Edad, fitci$confint[32:62,"lwr"], col="blue")
+```
+
+Al visualizar nuestros intervalos de confianza simultaneos, podemos decir que esto es suficiente para concluir que el tratamiento suministrado a personas de edades entre 30-60 genera un efecto positivo en la generación de anticuerpos en comparación con el grupo control (esto en cada grupo de edades en dicho intervalo), es decir, al suministrar el medicamento, a pesar de que si existe una decaida, esto ocurre de manera menos abrupta que en el grupo al que no se le suministro nada, pudiendo confirmar la afirmación dada, con un 90% de confianza.
+
+------------------------------------------------------------------------
+
+# Ejercicio 6
+
+Considere los datos del archivo *Tar2-6.csv* que fueron obtenidos mediante un diseño en donde todo se aleatorizó.
+
+I.  Considere un modelo de regresión lineal múltiple con las covariables X1 a X7 sin ninguna interacción. La variable dependiente es Y. Verifique los supuestos del modelo, en la parte de linealidad considere un análisis de forma global y para cada covariable (e.g. usando la función residualPlots). En caso de que alguno no se cumpla, realice transformaciones convenientes hasta que obtenga un modelo que parezca cumplir con los supuestos del modelo de regresión lineal múltiple.
+
+II. Con las variables transformadas en el inciso anterior, realice una selección de variables. Justifique su respuesta.
+
+III. Dé la interpretación de al menos un parámetro asociado a una variable continua y uno asociado a una variable categórica.
+
+## **Solución Inciso I)**
+
+#### Considere un modelo de regresión lineal múltiple con las covariables X1 a X7 sin ninguna interacción. La variable dependiente es Y. Verifique los supuestos del modelo, en la parte de linealidad considere un análisis de forma global y para cada covariable (e.g. usando la función residualPlots). En caso de que alguno no se cumpla, realice transformaciones convenientes hasta que obtenga un modelo que parezca cumplir con los supuestos del modelo de regresión lineal múltiple.
+
+------------------------------------------------------------------------
+
+Cargamos librerías
+
+```{r cargar-librerias6, message=FALSE, warning=FALSE}
+library(multcomp)
+library(GGally)
+library(ggplot2)
+library(car)
+library(lmtest)
+library(broom)
+library(nortest)
+library(tseries)
+library(lawstat)
+library(randtests)
+library(latex2exp)
+library(leaps)
+```
+
+Cargamos los datos
+
+```{r importar-datos-ejercicio6, echo=TRUE, fig.width=5, fig.height=5, out.width="100%", message=FALSE, warning=FALSE}
+# Limpiamos espacio
+rm(list = ls(all.names = TRUE))
+gc()
+
+# Cargamos datos
+Datos <- read.csv("Tar2-6.csv") # Cargamos el archivo .csv
+
+# Pasamos a factor las variables categóricas
+Datos$X1 <- factor(Datos$X1)
+Datos$X2 <- factor(Datos$X2)
+
+# Visualizamos tipo de datos
+str(Datos)
+```
+
+Gráficamos la relación entre los datos
+
+```{r relación-datos, message=FALSE, warning=FALSE, echo=TRUE, fig.width=11, fig.height=11, out.width="100%"}
+# Graficamos la relación entre todos los datos de nuestro dataframe
+ggpairs(Datos)
+```
+
+Gráficamente notamos comportamientos muy poco favorecedores para nuestro modelo.
+
+------------------------------------------------------------------------
+
+### **Verificación de Supuestos**
+
+Creamos el modelo de regresión lineal múltiple y verificamos visualmente los supuestos del modelo con la función de R: $plot(fit)$. Por el enunciado del ejercicio asumimos independencia, ya que los datos se generaron aleatoriamente.
+
+$$
+Y = \beta_0 + \beta_1 X1A2 + \beta_2 X1A3 + \beta_3 X1A4 + \beta_4 X2B2 + \beta_5 X2B3 + \beta_6 X2B4 + \beta_7 X3 + \beta_8 X4 + \beta_9 X5 + \beta_{10} X6 + \beta_{11} X7 + \epsilon
+$$
+
+```{r crear-modelo-fit1, echo=TRUE}
+# Creamos el modelo de regresión lineal múltiple
+fit <- lm(Y~X1+X2+X3+X4+X5+X6+X7, data = Datos)
+summary(fit)
+
+# Verificación visual de los supuestos
+par(mfrow=c(2,2))
+par(mar=c(5, 5, 3, 2))
+plot(fit, 1)   # Linealidad.        Se observa un patrón: no linealidad
+plot(fit, 3)   # Homocedasticidad.  Se observan comportamientos raros. No homocedasticidad 
+plot(fit, 2)   # Normalidad.        No se cumple normalidad, los puntos no se apegan a la recta
+plot(fit, 5)   # Outliers           Se observa 1 outlier de importancia
+```
+
+Podemos observar un comportamiento inusual de los datos que pueden afectar en los supuestos del modelo. A simple vista no podemos argumentar a favor del cumplimiento de los supuestos requeridos.
+
+Pasemos a realizar un análisis más profundo de los supuestos. Empezando por linealidad. Verifiquemos la linealidad general y por cada una de las covariables.
+
+#### Linealidad
+
+```{r linealidad-fit1, message=FALSE, warning=FALSE, echo=TRUE, fig.width=9, fig.height=9, out.width="100%"}
+# Linealidad General
+# Obsevamos que los puntos no siguen la linealidad que buscamos. Parecen formar una curva en vez de una recta.
+
+# Linealidad por cada covariable
+residualPlots(fit) # Vemos problemas con X3, X6 y de manera global
+
+# Continuamos con las gráficas condicionales sobre los residuales. Nos indican si es conveniente considerar algun tipo de polinomio en lugar de meter a la variable de forma individual
+crPlots(fit, order=2) 
+crPlots(fit, order=3) 
+crPlots(fit, terms= ~ X3, order=2) # Podriamos considerar elevar a X3 al cuadrado
+```
+
+Tenemos problemas con el supuesto de linealidad
+
+#### Homocedasticidad
+
+```{r homocedasticidad-fit1, message=FALSE, warning=FALSE, echo=TRUE}
+# H0: Varianza constante
+# vs
+# Ha: Hay alguna dependencia en la varianza
+
+# Prueba de homocedasticidad general
+lmtest::bptest(fit) # Se rechaza H0
+
+# Análisis Variable por Variable
+car::ncvTest(fit)     # Rechaza H0
+car::ncvTest(fit,~X1) # Rechaza H0
+car::ncvTest(fit,~X2) # Rechaza H0
+car::ncvTest(fit,~X3) # Rechaza H0
+car::ncvTest(fit,~X4) # No rechaza H0
+car::ncvTest(fit,~X5) # Rechaza H0
+car::ncvTest(fit,~X6) # Rechaza H0
+car::ncvTest(fit,~X7) # Rechaza H0
+```
+
+Concluimos que tenemos un problema grave con el supuesto de homocedasticidad.
+
+#### Normalidad
+
+```{r normalidad-fit1, message=FALSE, warning=FALSE, echo=TRUE}
+# Normalidad 
+
+# H0: Los datos vienen de la dist normal
+
+# Obtenemos columnas adicionales de información de interés
+Datosfit <- augment(fit)
+
+shapiro.test(Datosfit$.std.resid) # Se rechaza H0
+nortest::lillie.test(Datosfit$.std.resid) # Se rechaza H0
+tseries::jarque.bera.test(Datosfit$.std.resid) # Se rechaza H0
+```
+
+Dadas las pruebas de hipótesis decimos que no se cumplen los supuestos de normalidad.
+
+#### Independencia
+
+```{r independencia-fit1, message=FALSE, warning=FALSE, echo=TRUE}
+# Independencia
+par(mar=c(5, 5, 3, 1))
+par(mfrow=c(1,2))
+
+plot(1:length(Datosfit$.std.resid), Datosfit$.std.resid, xlab = TeX("$i$"), ylab=TeX("$e_s$"))
+
+# Autocorrelograma de los errores
+acf(Datosfit$.std.resid)
+
+# Prueba de rachas
+lawstat::runs.test(Datosfit$.std.resid, plot.it = FALSE)
+randtests::runs.test(Datosfit$.std.resid)
+```
+
+No se encontró evidencia en contra del supuesto de independencia.
+
+**Conclusión:** Debemos transformar a nuestras variables para hacer que nuestro modelo cumpla con los supuestos. Finalmente tenemos que: No se cumple Linealidad, Homocedasticidad y Normalidad.
+
+Procedemos a la transformación.
+
+### Transformación Box-Cox
+
+```{r transformaciónBoxCox-fit2, message=FALSE, warning=FALSE, echo=TRUE}
+# TRANSFORMACIÓN BOX-COX
+# Verificamos que no hayan valores negativos
+summary(Datos$Y)
+
+# Realizamos el Box-Cox
+summary(powerTransform(fit)) # Definimos la lambda = -1. Rechazamos transformación log
+
+# Considerando el resultado de la prueba anterior, realizamos la transformación de Y
+fit2 <- lm((1/Y)~X1+X2+X3+X4+X5+X6+X7, data = Datos)
+summary(fit2)
+```
+
+#### Verificación de Supuestos fit2
+
+Vamos a verificar nuevamente todos los supuestos:
+
+```{r verificación-visual-fit2, message=FALSE, warning=FALSE, echo=TRUE}
+# Verificación visual
+par(mar=c(5, 5, 3, 2))
+par(mfrow=c(2,2))
+# En general, se ve una mejora
+plot(fit2, 1)   # Linealidad.        
+plot(fit2, 3)   # Homocedasticidad.  
+plot(fit2, 2)   # Normalidad.        
+plot(fit2, 5)   # Outliers
+```
+
+```{r verificacion-supuestos-fit2, message=FALSE, warning=FALSE, echo=TRUE}
+# Verificación Linealidad por covariable
+residualPlots(fit2) # Persiste el problema con X3
+
+# Verificación Homocedasticidad
+car::ncvTest(fit2)      # No rechaza
+car::ncvTest(fit2,~X1)  # No rechaza
+car::ncvTest(fit2,~X2)  # No rechaza
+car::ncvTest(fit2,~X3)  # Rechaza. Debemos modificar X3
+car::ncvTest(fit2,~X4)  # No rechaza
+car::ncvTest(fit2,~X5)  # No rechaza
+car::ncvTest(fit2,~X6)  # No rechaza
+car::ncvTest(fit2,~X7)  # Rechaza. Debemos modificar X7
+
+# Verificación Normalidad
+Datosfit2 <- augment(fit2)
+
+shapiro.test(Datosfit2$.std.resid) # Rechaza
+nortest::lillie.test(Datosfit2$.std.resid) # Rechaza
+tseries::jarque.bera.test(Datosfit2$.std.resid) # Rechaza
+
+# Veamos las gráficas condicionales
+crPlots(fit2, order=2) # Parece que podríamos aplicarlo primero para X3
+crPlots(fit2, order=3)
+```
+
+### Transformación Box-Tidwell
+
+Tras el resultado anterior, decidimos aplicar una transformación al modelo modificando a X3. Aplicaremos una transformación Box-Tidwell y probaremos nuevamente los supuestos.
+
+```{r modelo-fit3, message=FALSE, warning=FALSE, echo=TRUE}
+# Verificamos si en verdad necesitamos la transformación
+boxTidwell((1/Y)~X3, ~X1+X2+X4+X5+X6+X7 , data=Datos) # Lambda = 0.5
+
+# Creamos el nuevo modelo
+fit3 <- lm((1/Y)~X1+X2+I((X3)^(.5))+X4+X5+X6+X7, data=Datos)
+summary(fit3)
+
+# Verificación visual
+par(mar=c(5, 5, 3, 1))
+par(mfrow=c(2,2))
+# Se ve super bien
+plot(fit3, 1)   # Linealidad.        
+plot(fit3, 3)   # Homocedasticidad.  
+plot(fit3, 2)   # Normalidad.        
+plot(fit3, 5)   # Outliers
+```
+
+#### Verificación de Supuestos fit3
+
+```{r verificación-supuestos-fit3, message=FALSE, warning=FALSE, echo=TRUE}
+# Verificación Linealidad por covariable
+residualPlots(fit3) # No se rechaza ninguna
+
+# Verificación Homocedasticidad
+car::ncvTest(fit3)      # No rechaza
+car::ncvTest(fit3,~X1)  # No rechaza
+car::ncvTest(fit3,~X2)  # No rechaza
+car::ncvTest(fit3,~I((X3)^(.5)))  # No rechaza
+car::ncvTest(fit3,~X4)  # No rechaza
+car::ncvTest(fit3,~X5)  # No rechaza
+car::ncvTest(fit3,~X6)  # No rechaza
+car::ncvTest(fit3,~X7)  # No rechaza
+
+
+# Verificación Normalidad
+Datosfit3 <- augment(fit3)
+
+shapiro.test(Datosfit3$.std.resid) # No Rechaza
+nortest::lillie.test(Datosfit3$.std.resid) # No Rechaza
+tseries::jarque.bera.test(Datosfit3$.std.resid) # No Rechaza
+
+# Veamos las gráficas condicionales
+crPlots(fit3, order=2) # Vemos que en X7 se podría mejorar
+crPlots(fit3, order=3)
+
+# Verificación Independencia
+par(mar=c(5, 5, 3, 1))
+par(mfrow=c(1,2))
+# Mejora considerablemente
+plot(1:length(Datosfit3$.std.resid), Datosfit3$.std.resid, xlab = TeX("$i$"), ylab=TeX("$e_s$"))
+# Autocorrelograma de los errores
+acf(Datosfit3$.std.resid)
+
+# Prueba de rachas
+lawstat::runs.test(Datosfit3$.std.resid, plot.it = FALSE) # No rechaza
+randtests::runs.test(Datosfit3$.std.resid) # No rechaza
+```
+
+#### Conclusión:
+
+El modelo fit3, trasformando a Y con Box-Cox y a X3 con Box-Tidwell, es un modelo que cumple los 4 supuestos principales de un modelo de regresión lineal múltiple. El modelo teórico es el siguiente:
+
+$$
+\frac{1}{Y} = \beta_0 + \beta_1 X1_{A2} + \beta_2 X1_{A3} + \beta_3 X1_{A4} + \beta_4 X2_{B2} + \beta_5 X2_{B3} + \beta_6 X2_{B4} + \beta_7 \sqrt{X3} + \beta_8 X4 + \beta_9 X5 + \beta_{10} X6 + \beta_{11} X7 + \epsilon
+$$
+
+Como aprendimos en clase, si el modelo completo cumple los supuestos, el reducido también.
+
+```{r modelo-reducido, message=FALSE, warning=FALSE, echo=TRUE}
+# Creamos el modelo elegido anteriormente
+fitred <- lm((1/Y)~X1+X2+I((X3)^(.5))+X6, data=Datos)
+summary(fitred)
+```
+
+Por lo tanto, eligiendo el modelo por el criterio $BIC$ llegamos a un modelo de regresión lineal múltiple reducido $fitred$.
+
+## **Solución Inciso III)**
+
+#### **Dé la interpretación de al menos un parámetro asociado a una variable continua y uno asociado a una variable categórica.**
+
+Vamos a hacer la interpretación considerando el modelo $fitred$, entonces:
+
+$\frac{1}{Y}=\beta_0 + \beta_1 X1_{A2} + \beta_2 X1_{A3} + \beta_3 X1_{A4} + \beta_4 X2_{B2} + \beta_5 X2_{B3} + \beta_6 X2_{B4} + \beta_7 \sqrt{X3} + \beta_{10} X6 + \epsilon$
+
+$E\left[\frac{1}{Y} \right] = \beta_0 + \beta_1 X1_{A2} + \beta_2 X1_{A3} + \beta_3 X1_{A4} + \beta_4 X2_{B2} + \beta_5 X2_{B3} + \beta_6 X2_{B4} + \beta_7 \sqrt{X3} + \beta_{10} X6$
+
+La estimación
+
+$\hat{E}\left[\frac{1}{Y} \right] = \hat{\beta_0} + \hat{\beta_1} X1_{A2} + \hat{\beta_2} X1_{A3} + \hat{\beta_3} X1_{A4} + \hat{\beta_4} X2_{B2} + \hat{\beta_5} X2_{B3} + \hat{\beta_6} X2_{B4} + \hat{\beta_7} \sqrt{X3} + \hat{\beta}_{10} X6$
+
+$\hat{E}\left[\frac{1}{Y} \right] = 12.936 + 16.905 X1_{A2} + 1.961 X1_{A3} + 1.99 X1_{A4} -5.007 X2_{B2} -4.86 X2_{B3} -2.72 X2_{B4} + 10.016 \sqrt{X3} -2.986 X6$
+
+Debemos tener cuidado con la interpretación porque la transformación $\frac{1}{Y}$ cambia algunas cosas. Notemos que, si el valor a la derecha de la igualdad aumenta, entonces el valor de Y disminuye, pero si el valor a la derecha de la igualdad disminuye, entonces el valor de Y aumenta. Entonces:
+
+**Interpretación de parámetros asociados a variables continuas**
+
+Tomando como referencia a X6, sabemos que su beta asociada es $\beta_{10}$ tal que $\hat{\beta}_{10}=-2.98591$. Entonces, manteniendo a todas las demás variables constantes, por cada unidad que aumenta X6, se espera un incremento en Y de $2.98591$.
+
+Por otro lado, para $\sqrt{X3}$, sabemos que su beta asociada es $\beta_7$ tal que $\hat{\beta}_{7}=10.01645$. Entonces, manteniendo a todas las demás variables constantes, por cada unidad que aumenta $\sqrt{X3}$, se espera un decremento en Y de $10.01645$.
+
+**Interpretación de parámetros asociados a variables categóricas**
+
+Interpretemos a $X1_{A2}$, sabemos que su beta asociada es $\beta_1$ tal que $\hat{\beta}_{1}=16.90482$.
+
+Recordando la interpretación de las betas asociadas a variables categóricas: las betas representan que tanto aumenta o disminuye Y en comparación al nivel de referencia.
+
+Entonces, manteniendo a todas las demás variables constantes, para la categoría $X1=X1_{A2}$, el valor esperado de $\frac{1}{Y}$ es $16.90482$ unidades mayor comparado con el nivel de referencia $X1_{A1}$. Es decir, el valor esperado de Y es $16.90482$ unidades menor comparado con el nivel de referencia $X1_{A1}$.
+
+
+
+
