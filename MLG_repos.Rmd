@@ -1,0 +1,405 @@
+---
+geometry: margin=1.2cm
+fontsize: 10pt
+output: pdf_document
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist{nosep, leftmargin=*}
+  - \linespread{0.90}
+  - \setlength{\parskip}{2pt}
+---
+
+```{r setup, include=FALSE}
+# Setup inicial
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  message = FALSE, 
+  warning = FALSE,
+  fig.height = 2.8,    
+  out.width = "90%",   
+  fig.align = 'center'
+)
+```
+
+## 4. Modelos lineales generalizados para datos de conteos
+
+La base de datos Preg4.csv contiene información sobre el número de casos de cáncer de pulmón (Cases) registrados entre 1968 y 1971 en cuatro cuidades de Dinamarca (City). En estos casos se registró también la edad de los pacientes (Age, variable categorizada en 5 grupos). El interés del análisis es estudiar si se puede indicar que a mayor edad existe mayor incidencia de cáncer de pulmón. Notemos que para realizar el análisis la variable de conteos Cases depende de forma inherente de la población de la ciudad (Pop), pues entre más grande la ciudad es mayor el número de casos que se pueden observar; de manera que el estudio se debe enfocar en las tasas de incidencia.
+
+```{r cargar-librerias1, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Cargamos las librerias necesarias
+library(ggplot2)
+library(MASS)
+library(DHARMa)  
+library(emmeans)
+library(multcomp)
+```
+
+```{r cargamos_datos, echo=FALSE, message=FALSE, warning=FALSE}
+# Cargamos los datos
+datos <- read.csv("C:/Users/aroja/OneDrive/Documentos/Seminario_esta/Preg4 - Preg4.csv")
+# Veamos las primeras filas
+head(datos)
+```
+
+```{r ver_datos, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Veamos el tipo de datos
+str(datos)
+```
+
+```{r convert, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Como Age y City son categoricas, convertimos a tipo factor 
+datos$City <- factor(datos$City)
+datos$Age <- factor(datos$Age, levels = c("40-54", "55-59", "60-64", "65-69", "70-74"))
+
+# Obtenemos la tasa de incidencias
+datos$tasa_incidencias <- datos$Cases / datos$Pop 
+```
+
+$i.$
+
+Veamos primero una gráfica de dispersión de los datos, en donde el eje $x$ son los grupos de edad y en el eje $y$ obtenemos la tasa de incidencia, definida como: $(Cases/Pop)$ para cada cruce Age-City distinguiendo con color cada Ciudad
+
+```{r grafica_1, out.width="55%", fig.width=6, fig.height=2.8, fig.align='center', echo=FALSE, message=FALSE, warning=FALSE}
+# Realizamos una gráfica de dispersión
+ggplot(data = datos, aes(x = Age, y = tasa_incidencias, colour = City)) +
+  geom_point(size = 2.5, alpha = 0.8) + theme_classic() + 
+  labs(
+    x = "Edad",
+    y = "Tasa de incidencias",
+    colour = "Ciudad"
+  ) 
+```
+
+Aquí podemos observar que para cada grupo de edad en cada ciudad, la tasa de incidencias es ascendente, siendo las edades $40-54$ años las que menor tasa tienen, sin embargo de $55$ a los $74$ años, notamos un incremento muy notable, lo cual motiva el ajuste de un modelo lineal generalizado:
+
+$ii.$
+
+Se probaron dos MLG para ver cual podriamos usar para modelar de mejor manera nuestro problema, implementando un término offset puesto que consideramos tasa de incidencias, para poder hacer comparaciones entre los grupos de las ciudades independientemente de la poblacion. Primero se utilizo un modelo Poisson con liga log dado por:
+
+$$\log(\mathbb{E}[\text{Cases}]) = \beta_0 + \sum_{j=2}^5 \beta_j I(\text{Age}_j) + \sum_{k=2}^4 \gamma_k I(\text{City}_k) + \sum_{j,k} \delta_{jk} I(\text{Age}_j)I(\text{City}_k) + \log(\text{Pop}) $$ Donde:
+
+-   Las categorías de referencia fijadas por el modelo son el grupo de edad $40\text{--}54$ años y la ciudad de Fredericia.
+
+-   $I(\cdot)$ toma el valor de $1$ si la observación pertenece a dicha categoría y $0$ en otro caso.
+
+```{r modelo_poisson_offset, echo=FALSE, message=FALSE, warning=FALSE}
+# Consideramos un primer modelo Poisson con offset (pues consideramos tasa de incidencias)
+fit1 <- glm(Cases ~ Age * City + offset(log(Pop)), family = poisson(link = "log"), data = datos)
+summary(fit1)
+```
+
+```{r mod_poisson_dh, out.width="65%", fig.width=7.5, fig.height=3.8, fig.align='center', echo=FALSE, message=FALSE, warning=FALSE}
+# Veamos las graficas para los supuestos 
+set.seed(123)
+fit1res <- simulateResiduals(fittedModel = fit1)
+plot(fit1res)
+# Se ven bastante mal las graficas de los supuestos Y las pruebas de hipotesis de cada test salen mal
+```
+
+Sin embargo este modelo no cumple con practicamente ninguna de las pruebas de verificacion de supuestos, además de que contiene muchos parámetros y es deseable trabajar con uno más simple, por ende se consideró un segundo modelo Poisson con liga log pero esta vez solo incluyendo la covariable Age dado por:
+
+$$\log(\mathbb{E}[\text{Cases}]) = \beta_0 + \beta_1 \cdot I(\text{Age}_{55\text{-}59}) + \beta_2 \cdot I(\text{Age}_{60\text{-}64}) + \beta_3 \cdot I(\text{Age}_{65\text{-}69}) + \beta_4 \cdot I(\text{Age}_{70\text{-}74}) + \log(\text{Pop})$$
+
+```{r modelo_poisson_sin, echo=FALSE, message=FALSE, warning=FALSE}
+# Ajustamos un segundo modelo unicamente con Age
+fit2 <- glm(Cases ~ Age + offset(log(Pop)), family = poisson(link = "log"), data = datos)
+summary(fit2)
+```
+
+Para evaluar si es mejor ultilizar este modelo, consideramos las siguientes pruebas:
+
+1.  Verificación de supuestos, en donde se comparan:
+
+-   KS test: $H_0:$ Los datos provienen de la distribución correcta vs $H_a:$ Los datos no provienen de la distribución correcta.
+
+-   Dispersión test:$H_0:$ La varianza se modela de manera correcta vs $H_a:$ La varianza no se modela de manera correcta.
+
+-   Residual vs predicted: $H_0$: La forma funcional del modelo está correctamente especificada vs $H_a$: Existe una mala especificación de la forma funcional o falta de linealidad.
+
+```{r supuestos_b, out.width="65%", fig.width=7.5, fig.height=3.8, fig.align='center', echo=FALSE, message=FALSE, warning=FALSE}
+# Veamos las graficas para los supuestos 
+set.seed(123)
+fit2res <- simulateResiduals(fittedModel = fit2)
+plot(fit2res)
+```
+
+Al observar esto, las pruebas de hipotesis de la distribución y de la dispersión $H_0$ no se rechazan, y aunque en la de linealidad el gráfico y la prueba de hipotesis no son tan ideales, aun así podríamos dar por buenos los supuestos aunque no completamente, pues podríamos hacer alguna transformación.
+
+```{r coef_disp, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Coeficiente de dispersión (regla de dedo)
+deviance(fit2)/df.residual(fit2)
+```
+
+2.  Coeficiente de dispersión: Dio como resultado $1.131886$, que es muy cercano a 1, lo que nos indica que el modelo Poisson es viable.
+
+3.  Prueba "Chisq" donde se comparan: $$\begin{cases} H_0: & \text{El modelo reducido (fit2) es suficiente } (\beta_{\text{City}} = 0 \text{ y } \gamma_{\text{Age:City}} = 0) \\ H_a: & \text{El modelo reducido no es suficiente, se requiere el modelo completo (fit1)} \end{cases}$$
+
+```{r chsq, echo=FALSE, message=FALSE, warning=FALSE}
+# Hacemos la prueba de hipotesis 
+anova(fit2, fit1, test = "Chisq")
+```
+
+Para esta prueba, $H_0$ no se rechaza pues $p-value = 0.3202 > 0.05$, i.e. hay evidencia estadistica para considerar el modelo reducido.
+
+4.  Prueba chi-cuadrada global de Wald, donde se comparan si la edad explica de forma significativa la tasa de incidencia de cáncer de pulmón, planteamos: $$\begin{cases} H_0: \mathbf{K}\boldsymbol{\beta} = \mathbf{0} \quad \implies \quad \beta_1 = \beta_2 = \beta_3 = \beta_4 = 0 \\ H_a: \mathbf{K}\boldsymbol{\beta} \neq \mathbf{0} \quad \implies \quad \text{Al menos un } \beta_j \neq 0 \end{cases}$$ Donde la matriz de contrastes es $K = \left(\begin{smallmatrix} 0 & 1 & 0 & 0 & 0 \\ 0 & 0 & 1 & 0 & 0 \\ 0 & 0 & 0 & 1 & 0 \\ 0 & 0 & 0 & 0 & 1 \end{smallmatrix}\right)$.
+
+```{r p_ch, echo=FALSE, message=FALSE, warning=FALSE}
+# Prueba Chi-cuadrada global de Wald
+K <- matrix(c(0, 1, 0, 0, 0,
+                0, 0, 1, 0, 0,
+                0, 0, 0, 1, 0, 
+                0, 0, 0, 0, 1), ncol = 5, nrow = 4, byrow = TRUE)
+m = c(0, 0, 0, 0)
+summary(glht(fit2, linfct = K, rhs = m), test = Chisqtest())
+```
+
+En la prueba rechazamos $H_0$ pues $p-value = 1.632e-16 < 0.05$, i.e., hay por lo menos un $\beta_j$ diferente de $0$
+
+```{r aic_mo, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Calculemos AIC para comparar ambos modelos
+c(AIC(fit1), AIC(fit2))
+```
+
+5.  AIC: El modelo Poisson completo $(fit1)$ obtuvo un AIC $=121.47$ y el modelo reducido $(fit2)$ uno de $108.45$. Con esto se concluye que el AIC del modelo reducido es menor que el del completo, por ende es mejor.
+
+6.  Finalmente en la gráfica de $i)$ se observa que la tasa de incidencia crece de forma consistente entre todas las ciudades al aumentar la edad. La ausencia de cruces marcados confirma visualmente que el efecto de la edad es homogéneo y no requiere términos de interacción.
+
+Con todos estos resultados podemos decir que es conveniente utilizar este segundo modelo reducido.
+
+$iii$
+
+Después se ajustó un modelo binomial negativo considerando el modelo seleccionado anteriormente (es decir es la misma expresión y liga, solo cambio la distribución)
+
+```{r mod_bin, echo=FALSE, message=FALSE, warning=FALSE}
+# Ahora ajustemos un modelo binomial negativo
+fit3 <- glm.nb(Cases ~ Age + offset(log(Pop)), data = datos, link = "log")
+summary(fit3)
+```
+
+De igual manera verificamos los supuestos:
+
+```{r VER_BIN, out.width="65%", fig.width=7.5, fig.height=3.8, fig.align='center', echo=FALSE, message=FALSE, warning=FALSE}
+# Veamos las graficas para los supuestos 
+set.seed(123)
+fit3res <- simulateResiduals(fittedModel = fit3)
+plot(fit3res)
+```
+
+```{r aic_fit3_, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Comparación del modelo Poisson y Binomial Negativa
+c(AIC(fit2),AIC(fit3))
+```
+
+Se obtuvieron los siguientes resultados de la comparación de AIC: Para $fit2$ (Poisson) $= 108.45$ y para $fit3$ (Binomial negativo) $= 110.45$. Con estos resultados se observa que el AIC de nuestro modelo fit2 es un poco mejor (solo 2 puntos menos), sin embargo al ver las graficas de supuestos en el modelo fit3 es notoria una mejoría en linealidad, por ende seleccionamos el modelo Binomial Negativo.
+
+```{r interv_confian, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+K <- rbind(
+  "Grupo 1" = c(1, 0, 0, 0, 0),  # b0
+  "Grupo 2" = c(1, 1, 0, 0, 0),  # b0 + b1
+  "Grupo 3" = c(1, 0, 1, 0, 0),  # b0 + b2
+  "Grupo 4" = c(1, 0, 0, 1, 0),  # b0 + b3
+  "Grupo 5" = c(1, 0, 0, 0, 1)   # b0 + b4
+)
+
+# Aplicamos glht con la matriz K
+fitE <- glht(fit3, linfct = K)
+
+# Obtenemos intervalos de confianza simultáneos al 95%
+fitci <- confint(fitE, level = 0.95)
+
+# Creamos un dataframe aplicando exp() para transformar de log(tasa) a Tasa de Incidencia
+df_simultaneo <- data.frame(
+  Age  = levels(datos$Age),
+  rate = exp(coef(fitE)),
+  lwr  = exp(fitci$confint[, "lwr"]),
+  upr  = exp(fitci$confint[, "upr"])
+)
+
+# Visualizamos los resultados numéricos
+print(df_simultaneo)
+
+```
+
+De modo que se obtuvieron los intervalos de confianza simultáneos de las tasas de incidencia para cada grupo de edad, primero numericamente en donde el intervalo empieza desde $0.0028$ y llega hasta $0.0180$ que es la tasa de incidencias para el grupo de edad: $70-74$. Graficamente lo podemos ver:
+
+```{r graf_in, out.width="55%", fig.width=6, fig.height=3.5, fig.align='center', echo=FALSE, message=FALSE, warning=FALSE}
+# Graficamos agregando los intervalos simultáneos sobre la gráfica del inciso i)
+ggplot() +
+  # Datos observados por ciudad (puntos de color)
+  geom_point(data = datos, aes(x = Age, y = Cases / Pop, color = City), size = 3, alpha = 0.7) +
+  # Intervalos de confianza simultáneos
+  geom_errorbar(data = df_simultaneo, aes(x = Age, ymin = lwr, ymax = upr), width = 0.2, linewidth = 0.8) +
+  # Estimaciones puntuales de la tasa del modelo
+  geom_point(data = df_simultaneo, aes(x = Age, y = rate), color = "black", size = 3.5, shape = 18) +
+  theme_classic() +
+  labs(
+    x = "Grupo de Edad",
+    y = "Tasa de Incidencia",
+    title = "Tasas de Incidencia e Intervalos de Confianza Simultáneos para fit3",
+    color = "Ciudad"
+  )
+```
+
+Como conclusión sobre estos intervalos de confianza simultaneos se puede observar tanto grafica como numericamente que conforme la edad avanza existe mayor incidencia de cáncer de pulmón, lo cual era el interés del análisis que se planteo inicialmente.
+
+$iv$
+
+Finalmente se consideraron 4 modelos diferentes, en donde se transformó la variable Age a una variable continua puesto que al ser categórica (como en los modelos anteriores) se dificulta un poco la interpretación, además de que por su naturaleza esa variable se podría haber registrado sin categorizar. Esto se realizó con una aproximación al usar el punto medio de cada intervalo de edad que define las categorías de Age, de modo que a este nueva variable se le llamó Ageprima.
+
+De esta manera los 4 modelos probados fueron Poisson y Binomial negativo con Ageprima como covariable: $$\log(\mathbb{E}[\text{Cases}_i]) = \beta_0 + \beta_1 \cdot \text{Ageprima}_i + \log(\text{Pop}_i)$$ Y Poisson y Binomial negativo agregando $(Ageprima)^2$ como covariable también:
+
+$$\log(\mathbb{E}[\text{Cases}_i]) = \beta_0 + \beta_1 \cdot \text{Ageprima}_i + \beta_2 \cdot \text{Ageprima}_i^2 + \log(\text{Pop}_i)$$
+
+```{r convert_age, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Asignamos los puntos medios de los intervalos de edad
+puntos_medios <- c(
+  "40-54" = 47,  # Punto medio entre 40 y 54 años
+  "55-59" = 57,  # Punto medio entre 55 y 59 años
+  "60-64" = 62,  # Punto medio entre 60 y 64 años
+  "65-69" = 67,  # Punto medio entre 65 y 69 años
+  "70-74" = 72   # Punto medio entre 70 y 74 años
+)
+
+# Creamos la columna Ageprima en el dataframe de R
+datos$Ageprima <- unname(puntos_medios[as.character(datos$Age)])
+```
+
+```{r poiss_agep, echo=FALSE, include=FALSE,message=FALSE, warning=FALSE}
+# Ajustamos el modelo Poisson usando Ageprima
+fit_agep <- glm(Cases ~ Ageprima + offset(log(Pop)), family = poisson(link = "log"), data = datos)
+summary(fit_agep)
+```
+
+```{r sup_agep, echo=FALSE, include=FALSE,message=FALSE, warning=FALSE}
+# Veamos las graficas para los supuestos 
+set.seed(123)
+fit_agepres <- simulateResiduals(fittedModel = fit_agep)
+plot(fit_agepres)
+```
+
+```{r bin_2, echo=FALSE, include=FALSE,message=FALSE, warning=FALSE}
+# Ajustamos el modelo Binomial usando Ageprima
+fit_ageb <- glm.nb(Cases ~ Ageprima + offset(log(Pop)), data = datos)
+summary(fit_ageb)
+```
+
+```{r graf_bin_n,echo=FALSE, include=FALSE,message=FALSE, warning=FALSE}
+# Veamos las graficas para los supuestos 
+set.seed(123)
+fit_agebres <- simulateResiduals(fittedModel = fit_ageb)
+plot(fit_agebres)
+```
+
+```{r pois_alcuadr, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Ajustamos el modelo Poisson usando Ageprima^2
+fit_age2p <- glm(Cases ~ Ageprima + I(Ageprima^2) + offset(log(Pop)), family = poisson(link = "log"),
+                 data = datos)
+summary(fit_age2p)
+```
+
+```{r pois_alcuadr_sup, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Veamos las graficas para los supuestos 
+set.seed(123)
+fit_age2pres <- simulateResiduals(fittedModel = fit_age2p)
+plot(fit_age2pres)
+```
+
+```{r bin_alcuadr5, echo=FALSE, message=FALSE, warning=FALSE}
+# Ajustamos el modelo Binomial usando Ageprima^2
+fit_age2b <- glm.nb(Cases ~ Ageprima + I(Ageprima^2) + offset(log(Pop)), data = datos)
+summary(fit_age2b)
+```
+
+De este modo solo presentaremos las pruebas hechas para el modelo Binomial negativo con termino cuádratico (el cual fue el elegido), pero cabe recalcar que para cada modelo se realizaron las mismas:
+
+-   Se obtuvieron los gráficos y pruebas de hipotesis correspondientes a la verificación de supuestos (como en el inciso $ii$ y $iii$):
+
+```{r bin_alcuadr_supu, out.width="65%", fig.width=7.5, fig.height=3.8, fig.align='center', echo=FALSE, message=FALSE, warning=FALSE}
+# Veamos las graficas para los supuestos 
+set.seed(123)
+fit_age2bres <- simulateResiduals(fittedModel = fit_age2b)
+plot(fit_age2bres)
+```
+
+Con estos resultados vemos que ninguna prueba de hipótesis se rechaza (estas se explican en el inciso $iii$) y las gráficas de igual manera se visualizan de muy buena manera, sobretodo la de linealidad (derecha) que es la que tenía los mayores problemas en los otros modelos.
+
+```{r pois_chisqw, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Comparemos para cada caso si es necesario meter el término cuadratico en el modelo poisson
+anova(fit_agep, fit_age2p, test = "Chisq")    # Modelo Poisson
+# Se concluye entonces que el modelo cuadrático es significativo 
+```
+
+```{r bin_chisque, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Comparar el modelo lineal vs cuadrático
+anova(fit_ageb, fit_age2b, test = "Chisq")   # Modelo binomial
+```
+
+-   Se realizaron pruebas chi-cuadrada para ver si era necesario meter el término cuadratico para las cuales, tanto para el modelo Binomial negativo y Poisson se concluyó que era necesario meter el término cuadrático, haciendo enfásis en la prueba entre los modelos Binomiales negativos se obtuvo un $p-value = 0.0203 < 0.05$ por ende rechazamos $H_0$ y concluimos lo dicho anteriormente.
+
+```{r aic_4, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Obtengamos el AIC para los 4 modelos 
+c(AIC(fit_agep), AIC(fit_ageb), AIC(fit_age2p), AIC(fit_age2b))
+```
+
+-   Se obtuvieron los AIC de los 4 modelos: De esta manera el modelo Binomial negativo con término cuádratico no tiene el menor AIC ($106.50$) pero la diferencia con el Poisson cuadrático ($104.50$) tampoco es tan grande, de modo que se concluyé que ambos modelos son buenos (El Poisson obtuvo AIC $= 107.92$ y el Binomial negativo un AIC $= 109.88$).
+
+```{r wlad_bin, echo=FALSE, include=FALSE, message=FALSE, warning=FALSE}
+# Matriz K para probar simultáneamente beta_1 = 0 Y beta_2 = 0
+K_p <- matrix(c(0, 1, 0,
+                     0, 0, 1), ncol = 3, nrow = 2, byrow = TRUE)
+m = c(0, 0)
+
+# Prueba Chi-cuadrada global de Wald
+summary(glht(fit_age2b, linfct = K_p, rhs = m), test = Chisqtest())
+```
+
+-   Finalmente se realizó la prueba Chi-cuadrada global de Wald (nuevamente esta prueba ya la habíamos especificado con mayor detalle anteriormente) para comprobar que el modelo elegido fuera significativo y fuera viable utilizarlo. Así, al hacer la prueba como $p-value = 4.990022e-18 <0.05$, la hipotesis nula se rechaza, i.e, podemos decir que al menos un $\beta_j$ es diferente de cero lo cual indica que al menos uno de los parametros ayudan a la explicación de la tasa de incidencia de cáncer de pulmón, por ende el modelo elegido es significativo y lo usaremos para el análisis.
+
+Ahora recordemos que el modelo ajustado es: $$\log(\widehat{\mathbb{E}}[\text{Cases}]) = \beta_0 + \beta_1 x + \beta_2 x^2 + \log(\text{Pop}) \iff \log(\widehat{\mathbb{E}}[\text{Cases}]) - \log(\text{Pop}) = \beta_0 + \beta_1 x + \beta_2 x^2 \iff \log\left( \frac{\widehat{\mathbb{E}}[\text{Cases}]}{\text{Pop}} \right) = \beta_0 + \beta_1 x + \beta_2 x^2$$ Definamos la tasa estimada como $\widehat{\text{Tasa}}(x) = \frac{\widehat{\mathbb{E}}[\text{Cases}]}{\text{Pop}}$, de modo que $\log(\widehat{\text{Tasa}}(x)) = \eta(x)$. Veamos que para dos edades $x_1, x_2 \in [40, 74]$ con $x_1 < x_2$, la tasa de incidencia esperada $\widehat{\text{Tasa}}(x)$ (donde $x = \text{Ageprima}$) aumenta con la edad que es el caso de estudio. Para esto, buscamos que $\eta(x_2) > \eta(x_1)$. Desarrollando la diferencia en el componente lineal: $$0 < \eta(x_2) - \eta(x_1) = \beta_1(x_2 - x_1) + \beta_2(x_2^2 - x_1^2) = (x_2 - x_1)\left[ \beta_1 + \beta_2(x_1 + x_2) \right]$$
+
+Como $(x_2 - x_1) > 0$ y $\hat{\beta}_2 = -0.0025 < 0$, la expresión decrece respecto a la suma $(x_1 + x_2)$. Evaluando los coeficientes estimados ($\hat{\beta}_1 = 0.3723, \hat{\beta}_2 = -0.0025$) en la cota superior ($x_1 + x_2 = 148$), que es el peor de los casos al ser la mayor suma de edades posible:$$0.3723 + (-0.0025)(148) = 0.0023 > 0 \implies \eta(x_1) < \eta(x_2)$$
+
+Dado que la función liga $\text{Log}$ es **estrictamente creciente**, preserva el orden de la desigualdad: $\eta(x_1) < \eta(x_2) \iff \log(\widehat{\text{Tasa}}(x_1)) < \log(\widehat{\text{Tasa}}(x_2)) \iff \widehat{\text{Tasa}}(x_1) < \widehat{\text{Tasa}}(x_2)$.
+
+Concluyendo que a mayor edad existe una mayor tasa de incidencia esperada de cáncer de pulmón.
+
+Finalmente se realizó una gráfica con intervalos de confianza simultaneos para verificar gráficamente lo desarrollado anteriormente:
+
+```{r bin_inter_s,out.width="55%", fig.width=6, fig.height=3, fig.align='center', echo=FALSE, message=FALSE, warning=FALSE}
+# Edades
+grid <- data.frame(Ageprima = seq(40, 74, length.out = 100), Pop = 1)
+
+# Predicciones en la escala del predictor lineal
+pred <- predict(fit_age2p, newdata = grid, se.fit = TRUE)
+
+# Factor para Banda simultanea al 95%
+k <- sqrt(2 * qf(0.95, df1 = 2, df2 = fit_age2p$df.residual)) 
+
+grid$Tasa   <- exp(pred$fit)
+grid$ic_inf <- exp(pred$fit - k * pred$se.fit)
+grid$ic_sup <- exp(pred$fit + k * pred$se.fit)
+
+# Tasa observada en los datos reales
+datos$Tasa_Observada <- datos$Cases / datos$Pop
+
+# Gráfica completa
+ggplot() +
+  # Banda de confianza
+  geom_ribbon(data = grid, aes(x = Ageprima, ymin = ic_inf, ymax = ic_sup), 
+              fill = "blue", alpha = 0.15) +
+  # Curva modelo cuadrático
+  geom_line(data = grid, aes(x = Ageprima, y = Tasa), 
+            color = "blue", linewidth = 1) +
+  # Puntos de las ciudades observadas
+  geom_point(data = datos, aes(x = Ageprima, y = Tasa_Observada, color = City), 
+             size = 2.5) +
+  labs(
+    title = "Incidencia de Cáncer de Pulmón para cada edad",
+    x = "Edad (Age)",
+    y = "Tasa de Incidencia Estimada",
+    color = "Ciudad"
+  ) +
+  theme_minimal()
+```
+
+Finalmente para concluir se comprobó teorica y graficamente que efectivamente con la edad la tasa de incidencia crece. Esto lo pudimos comprobar tanto para los grupos de edades (covariables categoricas) como para las edades por separado, concluyendo de esta manera, el motivo del análisis.
